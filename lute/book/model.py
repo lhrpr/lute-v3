@@ -2,7 +2,12 @@
 Book domain objects.
 """
 
-from lute.models.book import BookTag, Book as DBBook, Text as DBText
+from lute.models.book import (
+    BookTag,
+    Book as DBBook,
+    BookSection as DBBookSection,
+    Text as DBText,
+)
 from lute.models.repositories import (
     BookRepository,
     BookTagRepository,
@@ -79,6 +84,14 @@ class Book:  # pylint: disable=too-many-instance-attributes
 
         self.threshold_page_tokens = 250
         self.split_by = "paragraphs"
+
+        self.split_at_sections = True
+
+        # Structure found in the source file, if any: each section
+        # starts a new page, and is stored for parallel-text alignment.
+        # Only populated when split_at_sections is set, since a section
+        # that doesn't start a page has no exact page to anchor to.
+        self.sections = []
 
         # The source file used for the book text.
         # Overrides the self.text if not None.
@@ -169,20 +182,53 @@ class Repository:
         return segments
 
     def _split_pages(self, book, language):
-        "Split fulltext into pages, respecting sentences."
+        """
+        Split fulltext into pages, respecting sentences.
+
+        Returns (pages, segment_start_pages, segment_word_counts).  A
+        segment is an epub section when the import found structure, and
+        a "---" delimited chunk otherwise; either way each one starts a
+        fresh page, which is what makes a section's start page exact.
+        """
+        sections = getattr(book, "sections", None)
+        if sections:
+            segments = [s.text for s in sections]
+        else:
+            segments = self._split_text_at_page_breaks(book.text)
 
         pages = []
-        for segment in self._split_text_at_page_breaks(book.text):
+        segment_start_pages = []
+        segment_word_counts = []
+        for segment in segments:
+            segment_start_pages.append(len(pages) + 1)
             tokens = language.parser.get_parsed_tokens(segment, language)
+            segment_word_counts.append(sum(1 for t in tokens if t.is_word))
             for toks in token_group_generator(
                 tokens, book.split_by, book.threshold_page_tokens
             ):
                 s = "".join([t.token for t in toks])
                 s = s.replace("\r", "").replace("¶", "\n")
-                pages.append(s.strip())
-        pages = [p for p in pages if p.strip() != ""]
+                s = s.strip()
+                if s != "":
+                    pages.append(s)
 
-        return pages
+        return pages, segment_start_pages, segment_word_counts
+
+    def _add_sections(self, dbbook, book, section_starts, section_words):
+        "Record the book's structure, if the import found any."
+        sections = getattr(book, "sections", None)
+        if not sections:
+            return
+        for order, (section, start, words) in enumerate(
+            zip(sections, section_starts, section_words)
+        ):
+            dbsection = DBBookSection()
+            dbsection.order = order
+            dbsection.title = section.title
+            dbsection.start_page = start
+            dbsection.token_count = words
+            dbsection.level = getattr(section, "level", None)
+            dbbook.sections.append(dbsection)
 
     def _build_db_book(self, book):
         "Convert a book business object to a DBBook."
@@ -199,10 +245,11 @@ class Repository:
 
         b = None
         if book.id is None:
-            pages = self._split_pages(book, lang)
+            pages, section_starts, section_words = self._split_pages(book, lang)
             b = DBBook(book.title, lang)
             for index, page in enumerate(pages):
                 _ = DBText(b, page, index + 1)
+            self._add_sections(b, book, section_starts, section_words)
         else:
             b = self.book_repo.find(book.id)
 

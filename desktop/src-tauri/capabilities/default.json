@@ -1,0 +1,15 @@
+{
+  "identifier": "default",
+  "description": "Capabilities for the main Lute window, including the locally hosted Lute pages.",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://localhost:*", "http://127.0.0.1:*"]
+  },
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "http://**" }, { "url": "https://**" }]
+    }
+  ]
+}

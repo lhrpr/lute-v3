@@ -37,6 +37,34 @@
   <canvas id="wordCountChart"></canvas>
 </div>
 
+<h2>Words marked known</h2>
+
+<table class="statsWordsRead">
+  <tr>
+    <th />
+    <th>today</th>
+    <th>last week</th>
+    <th>last month</th>
+    <th>last year</th>
+    <th>all time</th>
+  </tr>
+  {% for lang in known_table_data %}
+  <tr>
+    <td>{{ lang.name }}</td>
+    <td>{{ lang.counts.day }}</td>
+    <td>{{ lang.counts.week }}</td>
+    <td>{{ lang.counts.month }}</td>
+    <td>{{ lang.counts.year }}</td>
+    <td>{{ lang.counts.total }}</td>
+  </tr>
+  {% endfor %}
+</ul>
+</table>
+
+<div style="position: relative; aspect-ratio: 3">
+  <canvas id="knownWordChart"></canvas>
+</div>
+
 {% if reading_streak > 0 %}
   <h2>Reading Streak: {{ reading_streak }} day{{ reading_streak != 1 and 's' or '' }}</h2>
 {% endif %}
@@ -46,12 +74,18 @@
     fetch('/stats/data')
       .then(response => response.json())
       .then(data => {
-        renderChart(data);
+        renderChart(data, 'wordCountChart');
+      });
+
+    fetch('/stats/known_data')
+      .then(response => response.json())
+      .then(data => {
+        renderChart(data, 'knownWordChart');
       });
   });
 
-  function renderChart(data) {
-    var ctx = document.getElementById('wordCountChart').getContext('2d');
+  function renderChart(data, canvasId) {
+    var ctx = document.getElementById(canvasId).getContext('2d');
 
     datasets = [];
 

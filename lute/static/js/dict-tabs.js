@@ -149,6 +149,436 @@ class ImageLookupButton extends GeneralLookupButton {
 
 
 /**
+ * AI "Explain in context" button.
+ *
+ * Asks the server (which cascades through the configured Gemini models, best
+ * first) to explain the highlighted word/phrase in the context of its
+ * sentence, and renders the reply in its own dict frame.  Only created when
+ * AI features are enabled.  Triggered by click, never automatically.
+ */
+class AIExplainLookupButton extends GeneralLookupButton {
+  constructor() {
+    // do_lookup is overridden below, so the handler passed here is unused.
+    super(
+      "ai-explain-btn",
+      "Explain",
+      "Explain the highlighted word/phrase in context (AI)",
+      "dict-ai-explain-btn",
+      () => {}
+    );
+    this._userInitiated = false;
+    // Only hit the API on an explicit button click -- never automatically
+    // when this panel merely happens to be the active tab as new words open.
+    this.btn.onclick = () => {
+      this._userInitiated = true;
+      this.do_lookup();
+    };
+  }
+
+  do_lookup() {
+    this.activate();
+    if (this._userInitiated) {
+      this._userInitiated = false;
+      this._explain(this.frame);
+    } else {
+      // Programmatic (re)activation, e.g. a new word opened while this panel
+      // was active: show a prompt instead of spending an API call.
+      this._show_prompt(this.frame);
+    }
+  }
+
+  _show_prompt(iframe) {
+    const ctx = this._get_context();
+    const esc = AIExplainLookupButton._esc;
+    const msg =
+      ctx.term === ""
+        ? "Click a word, then press Explain."
+        : `Press Explain to explain “${esc(ctx.term)}” in context.`;
+    AIExplainLookupButton._write(iframe, `<p class="ai-explain-msg">${msg}</p>`);
+  }
+
+  /** Term (from the form), sentence and language (from the reading page). */
+  _get_context() {
+    const container = LookupButton.TERM_FORM_CONTAINER;
+    const textEl = container ? container.querySelector("#text") : null;
+    let term = textEl
+      ? textEl.value.replaceAll("​", "").replace(/\s+/g, " ").trim()
+      : "";
+
+    let sentence = "";
+    let langid = parseInt(LookupButton.LANG_ID) || 0;
+    // dict-tabs.js runs in the reading page, so this global is same-window.
+    const ctx = window.LUTE_LAST_CLICKED_CONTEXT;
+    if (ctx) {
+      sentence = ctx.sentence || "";
+      if (ctx.langid) langid = ctx.langid;
+      if (term === "" && ctx.term) term = ctx.term.replaceAll("​", "").trim();
+    }
+    return { term: term, sentence: sentence, language_id: langid };
+  }
+
+  _explain(iframe) {
+    const ctx = this._get_context();
+    const esc = AIExplainLookupButton._esc;
+    if (ctx.term === "") {
+      AIExplainLookupButton._write(
+        iframe,
+        `<p class="ai-explain-msg">Click a word first, then press Explain.</p>`
+      );
+      return;
+    }
+    AIExplainLookupButton._write(
+      iframe,
+      `<p class="ai-explain-msg ai-explain-loading">Explaining “${esc(ctx.term)}”…</p>`
+    );
+    fetch("/ai/explain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(ctx),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.enabled === false) {
+          AIExplainLookupButton._write(
+            iframe,
+            `<p class="ai-explain-msg">${esc(data.reason || "AI features are disabled.")}</p>`
+          );
+        } else if (data.error) {
+          AIExplainLookupButton._write(
+            iframe,
+            `<p class="ai-explain-msg ai-explain-error">${esc(data.error)}</p>`
+          );
+        } else {
+          AIExplainLookupButton._render(iframe, ctx.term, data.explanation, data.model);
+        }
+      })
+      .catch(() =>
+        AIExplainLookupButton._write(
+          iframe,
+          `<p class="ai-explain-msg ai-explain-error">Could not load explanation.</p>`
+        )
+      );
+  }
+
+  static _esc(s) {
+    return String(s == null ? "" : s)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
+  }
+
+  /** Escaped free text -> paragraphs (blank line splits, newline -> <br>). */
+  static _format(text) {
+    const esc = AIExplainLookupButton._esc(text || "").trim();
+    if (esc === "")
+      return `<p class="ai-explain-msg">No explanation returned.</p>`;
+    return esc
+      .split(/\n\s*\n/)
+      .map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`)
+      .join("");
+  }
+
+  static _render(iframe, term, explanation, model) {
+    const esc = AIExplainLookupButton._esc;
+    const footer = model
+      ? `<div class="ai-explain-model">via ${esc(model)}</div>`
+      : "";
+    const body =
+      `<h3 class="ai-explain-term">${esc(term)}</h3>` +
+      AIExplainLookupButton._format(explanation) +
+      footer;
+    AIExplainLookupButton._write(iframe, body);
+  }
+
+  /** Write a self-contained doc into the (same-origin, about:blank) frame. */
+  static _write(iframe, bodyHtml) {
+    const doc =
+      iframe.contentDocument ||
+      (iframe.contentWindow && iframe.contentWindow.document);
+    if (!doc) return;
+    doc.open();
+    doc.write(
+      `<!doctype html><html><head><meta charset="utf-8">` +
+        `<style>${AIExplainLookupButton.CSS}</style></head>` +
+        `<body>${bodyHtml}</body></html>`
+    );
+    doc.close();
+  }
+}
+
+AIExplainLookupButton.CSS = `
+  body { font-family: sans-serif; font-size: 0.95rem; line-height: 1.5;
+         color: #222; margin: 0; padding: 0.6rem 0.8rem; }
+  .ai-explain-term { margin: 0 0 0.5rem 0; font-size: 1.05rem; color: #2b6cb0; }
+  p { margin: 0 0 0.6rem 0; }
+  .ai-explain-msg { color: #555; }
+  .ai-explain-loading { font-style: italic; }
+  .ai-explain-error { color: #b00020; }
+  .ai-explain-model { margin-top: 0.8rem; font-size: 0.75rem; color: #999; }
+`;
+
+
+/**
+ * DeepL "translate sentence/paragraph" button.
+ *
+ * Adds a sidebar tab that translates the current sentence or paragraph with the
+ * DeepL API.  A dropdown lets the user pick sentence vs paragraph; the choice
+ * is remembered (localStorage) and stays active until changed again.
+ *
+ * Like the AI Explain panel, translation is only fetched on an explicit action
+ * (clicking the tab, pressing Translate, or changing the dropdown) -- never
+ * automatically as new words open.  Only created when DeepL is enabled.
+ */
+class DeepLTranslateLookupButton extends GeneralLookupButton {
+
+  static MODE_STORAGE_KEY = "lute_deepl_translate_mode";
+
+  constructor() {
+    // do_lookup is overridden below, so the handler passed here is unused.
+    super(
+      "deepl-translate-btn",
+      "DeepL",
+      "Translate the current sentence/paragraph (DeepL)",
+      "dict-deepl-btn",
+      () => {}
+    );
+    this._userInitiated = false;
+    // Only hit the API on an explicit button click -- never automatically when
+    // this panel merely happens to be the active tab as new words open.
+    this.btn.onclick = () => {
+      this._userInitiated = true;
+      this.do_lookup();
+    };
+  }
+
+  /** Persisted sentence/paragraph choice. *************************/
+
+  static _get_mode() {
+    try {
+      const m = window.localStorage.getItem(
+        DeepLTranslateLookupButton.MODE_STORAGE_KEY
+      );
+      return m === "paragraph" ? "paragraph" : "sentence";
+    } catch (e) {
+      return "sentence";
+    }
+  }
+
+  static _set_mode(mode) {
+    try {
+      window.localStorage.setItem(
+        DeepLTranslateLookupButton.MODE_STORAGE_KEY,
+        mode === "paragraph" ? "paragraph" : "sentence"
+      );
+    } catch (e) {
+      /* ignore storage errors (e.g. private mode) */
+    }
+  }
+
+  do_lookup() {
+    this.activate();
+    const initiated = this._userInitiated;
+    this._userInitiated = false;
+    // (Re)draw the controls, then either translate (explicit click) or just
+    // prompt (programmatic reactivation when a new word opened).
+    this._render_shell(this.frame);
+    if (initiated)
+      this._translate(this.frame);
+    else
+      this._show_prompt(this.frame);
+  }
+
+  /** Sentence/paragraph text of the last-clicked word, from the reading page. */
+  _get_context() {
+    let sentence = "";
+    let paragraph = "";
+    let langid = parseInt(LookupButton.LANG_ID) || 0;
+    // dict-tabs.js runs in the reading page, so this global is same-window.
+    const ctx = window.LUTE_LAST_CLICKED_CONTEXT;
+    if (ctx) {
+      sentence = ctx.sentence || "";
+      paragraph = ctx.paragraph || "";
+      if (ctx.langid) langid = ctx.langid;
+    }
+    return { sentence: sentence, paragraph: paragraph, language_id: langid };
+  }
+
+  /** The text to translate for the currently-selected mode. */
+  _current_text() {
+    const ctx = this._get_context();
+    return DeepLTranslateLookupButton._get_mode() === "paragraph"
+      ? ctx.paragraph
+      : ctx.sentence;
+  }
+
+  _doc(iframe) {
+    return (
+      iframe.contentDocument ||
+      (iframe.contentWindow && iframe.contentWindow.document)
+    );
+  }
+
+  /** Write the dropdown + Translate button + result area, and wire handlers. */
+  _render_shell(iframe) {
+    const mode = DeepLTranslateLookupButton._get_mode();
+    const sel = (m) => (mode === m ? " selected" : "");
+    const shell =
+      `<div class="deepl-controls">` +
+      `<label for="deepl-mode">Translate</label>` +
+      `<select id="deepl-mode">` +
+      `<option value="sentence"${sel("sentence")}>Sentence</option>` +
+      `<option value="paragraph"${sel("paragraph")}>Paragraph</option>` +
+      `</select>` +
+      `<button id="deepl-go" type="button">Translate</button>` +
+      `</div>` +
+      `<div id="deepl-result"></div>`;
+    DeepLTranslateLookupButton._write(iframe, shell);
+
+    const doc = this._doc(iframe);
+    if (!doc) return;
+    const select = doc.getElementById("deepl-mode");
+    const go = doc.getElementById("deepl-go");
+    if (select) {
+      select.addEventListener("change", () => {
+        DeepLTranslateLookupButton._set_mode(select.value);
+        this._translate(iframe);
+      });
+    }
+    if (go) go.addEventListener("click", () => this._translate(iframe));
+  }
+
+  _set_result(iframe, html) {
+    const doc = this._doc(iframe);
+    const el = doc ? doc.getElementById("deepl-result") : null;
+    if (el) el.innerHTML = html;
+  }
+
+  _show_prompt(iframe) {
+    const esc = DeepLTranslateLookupButton._esc;
+    const mode = DeepLTranslateLookupButton._get_mode();
+    const msg =
+      (this._current_text() || "").trim() === ""
+        ? "Click a word in the text, then press Translate."
+        : `Press Translate to translate the current ${mode}.`;
+    this._set_result(iframe, `<p class="deepl-msg">${esc(msg)}</p>`);
+  }
+
+  _translate(iframe) {
+    const esc = DeepLTranslateLookupButton._esc;
+    const mode = DeepLTranslateLookupButton._get_mode();
+    const text = (this._current_text() || "").trim();
+    if (text === "") {
+      this._set_result(
+        iframe,
+        `<p class="deepl-msg">Click a word in the text first, then press Translate.</p>`
+      );
+      return;
+    }
+    this._set_result(
+      iframe,
+      `<p class="deepl-msg deepl-loading">Translating the ${esc(mode)}…</p>`
+    );
+    fetch("/ai/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.enabled === false) {
+          this._set_result(
+            iframe,
+            `<p class="deepl-msg">${esc(data.reason || "DeepL translation is disabled.")}</p>`
+          );
+        } else if (data.error) {
+          this._set_result(
+            iframe,
+            `<p class="deepl-msg deepl-error">${esc(data.error)}</p>`
+          );
+        } else {
+          this._render_translation(
+            iframe,
+            text,
+            data.translation,
+            data.detected_source_lang
+          );
+        }
+      })
+      .catch(() =>
+        this._set_result(
+          iframe,
+          `<p class="deepl-msg deepl-error">Could not load translation.</p>`
+        )
+      );
+  }
+
+  _render_translation(iframe, source, translation, detected) {
+    const esc = DeepLTranslateLookupButton._esc;
+    const fmt = DeepLTranslateLookupButton._format;
+    const meta = detected
+      ? `<div class="deepl-meta">Detected source: ${esc(detected)} · via DeepL</div>`
+      : `<div class="deepl-meta">via DeepL</div>`;
+    const body =
+      `<div class="deepl-source">${fmt(source)}</div>` +
+      `<div class="deepl-translation">${fmt(translation)}</div>` +
+      meta;
+    this._set_result(iframe, body);
+  }
+
+  static _esc(s) {
+    return String(s == null ? "" : s)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
+  }
+
+  /** Escaped free text -> paragraphs (blank line splits, newline -> <br>). */
+  static _format(text) {
+    const esc = DeepLTranslateLookupButton._esc(text || "").trim();
+    if (esc === "") return "";
+    return esc
+      .split(/\n\s*\n/)
+      .map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`)
+      .join("");
+  }
+
+  /** Write a self-contained doc into the (same-origin, about:blank) frame. */
+  static _write(iframe, bodyHtml) {
+    const doc =
+      iframe.contentDocument ||
+      (iframe.contentWindow && iframe.contentWindow.document);
+    if (!doc) return;
+    doc.open();
+    doc.write(
+      `<!doctype html><html><head><meta charset="utf-8">` +
+        `<style>${DeepLTranslateLookupButton.CSS}</style></head>` +
+        `<body>${bodyHtml}</body></html>`
+    );
+    doc.close();
+  }
+}
+
+DeepLTranslateLookupButton.CSS = `
+  body { font-family: sans-serif; font-size: 0.95rem; line-height: 1.5;
+         color: #222; margin: 0; padding: 0.6rem 0.8rem; }
+  .deepl-controls { display: flex; align-items: center; gap: 0.4rem;
+         margin-bottom: 0.6rem; flex-wrap: wrap; }
+  .deepl-controls label { color: #555; }
+  .deepl-controls select, .deepl-controls button { font-size: 0.9rem;
+         padding: 0.15rem 0.35rem; }
+  .deepl-controls button { cursor: pointer; }
+  p { margin: 0 0 0.6rem 0; }
+  .deepl-source { color: #666; font-style: italic; margin-bottom: 0.5rem;
+         padding-bottom: 0.5rem; border-bottom: 1px solid #eee; }
+  .deepl-translation { color: #222; }
+  .deepl-msg { color: #555; }
+  .deepl-loading { font-style: italic; }
+  .deepl-error { color: #b00020; }
+  .deepl-meta { margin-top: 0.8rem; font-size: 0.75rem; color: #999; }
+`;
+
+
+/**
  * A "dictionary button" to be shown in the UI.
  * Manages display state, loading and caching content.
  *
@@ -347,7 +777,17 @@ function createLookupButtons(tab_count = 5) {
     first_button.do_lookup();
   }
 
-  for (let b of [new SentenceLookupButton(), new ImageLookupButton()])
+  const static_buttons = [new SentenceLookupButton(), new ImageLookupButton()];
+  const have_settings = typeof LUTE_USER_SETTINGS !== "undefined";
+  // Add the AI "Explain in context" panel only when AI features are enabled.
+  const ai_enabled = have_settings && LUTE_USER_SETTINGS.ai_suggestions_enabled;
+  if (ai_enabled)
+    static_buttons.push(new AIExplainLookupButton());
+  // Add the DeepL sentence/paragraph translation panel when DeepL is enabled.
+  const deepl_enabled = have_settings && LUTE_USER_SETTINGS.deepl_enabled;
+  if (deepl_enabled)
+    static_buttons.push(new DeepLTranslateLookupButton());
+  for (let b of static_buttons)
     document.getElementById("dicttabsstatic").appendChild(b.btn);
 
   const dictframes = document.getElementById("dictframes");

@@ -20,6 +20,13 @@
   <input type="checkbox" name="tap_sets_status" id="tap_sets_status">
 </div>
 
+{% if companion %}
+<div id="companion_visible-container">
+  <label for="companion_visible">Show companion text</label>
+  <input type="checkbox" name="companion_visible" id="companion_visible" checked>
+</div>
+{% endif %}
+
 <div class="text-options-container">
   <div class="text-options-btn-container">
     <button class="text-options-button font-minus" title="Decrease font size"></button>

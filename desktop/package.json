@@ -1,0 +1,15 @@
+{
+  "name": "lute-desktop",
+  "version": "3.10.3",
+  "private": true,
+  "description": "Tauri desktop shell for Lute v3",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "icon": "tauri icon"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

@@ -185,9 +185,21 @@
     f.submit();
   }
 
+  /* The title is only used for the confirm message; a malformed
+     encoding must never stop the action from running. */
+  function _book_title_for_confirm(el) {
+    const raw = $(el).data('bktitle');
+    try {
+      return decodeURIComponent(raw);
+    } catch (e) {
+      console.error('Could not decode book title, using raw value.', e);
+      return raw;
+    }
+  }
+
   function confirm_archive(el) {
-    const booktitle = decodeURIComponent($(el).data('bktitle'));
     const bookid = $(el).data('bkid');
+    const booktitle = _book_title_for_confirm(el);
     if (!confirm(`Archiving "${booktitle}".  Click OK to proceed, or Cancel.`)) {
       return;
     }
@@ -211,9 +223,14 @@
     document.location = `/book/edit/${bookid}`;
   }
 
-  function confirm_delete(el) {
-    const booktitle = decodeURIComponent($(el).data('bktitle'));
+  function pair_book(el) {
     const bookid = $(el).data('bkid');
+    document.location = `/parallel/pair/${bookid}`;
+  }
+
+  function confirm_delete(el) {
+    const bookid = $(el).data('bkid');
+    const booktitle = _book_title_for_confirm(el);
     if (!confirm(`Deleting "${booktitle}".  Click OK to proceed, or Cancel.`)) {
       return;
     }
@@ -331,6 +348,7 @@
     };
 
     make_link('Edit', "edit_book");
+    make_link('Read in parallel', "pair_book");
     if (is_active) {
       make_link('Archive', "confirm_archive");
     }

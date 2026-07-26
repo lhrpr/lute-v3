@@ -13,7 +13,7 @@
    * errors.
    */
   if (typeof LUTE_USER_SETTINGS === "undefined") {
-    const LUTE_USER_SETTINGS = {{ user_settings | safe }};
+    window.LUTE_USER_SETTINGS = {{ user_settings | safe }};
   }
   if (typeof LUTE_USER_HOTKEYS === "undefined") {
     window.LUTE_USER_HOTKEYS = {{ user_hotkeys | safe }};
@@ -65,7 +65,7 @@
 
       <div id="translation-container">
         <div>{{ form.translation }}</div>
-        <img {% if term.current_image %}style="grid-column: -1; display: block"{% endif %} 
+        <img {% if term.current_image %}style="grid-column: -1; display: block"{% endif %}
              class="zoomableTermImage"
              id="term_image"
              tabindex="0"
@@ -73,6 +73,8 @@
              onclick="clicked_zoomable_image(this);"
              />
       </div>
+
+      <div id="ai-suggestions" class="ai-suggestions"></div>
 
       <div id="status-container">
         {{ form.status(class="form-control") }}
@@ -98,6 +100,7 @@
 
 
 <script type="text/javascript" src="/static/js/never_cache/lute-tagify-utils.js" charset="utf-8"></script>
+<script type="text/javascript" src="{{ url_for('static', filename='js/ai-suggestions.js') }}" charset="utf-8"></script>
 
 
 <script type="text/javascript">

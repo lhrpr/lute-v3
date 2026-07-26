@@ -37,8 +37,38 @@ class BookDataFromUrl:
     text: str = None
 
 
+@dataclass
+class ExtractedSection:
+    "A structural division found in a source file, e.g. an epub chapter."
+    title: str = None
+    text: str = ""
+    # Heading tag level, 1-6, or None.  Compared between books only by
+    # its rank, since books disagree on which tag means what.
+    level: int = None
+
+
+# Spine items shorter than this are cover pages, nav documents, and
+# half-titles rather than content.  Aligning against them just adds
+# noise, and they are never what a reader wants as a chapter.
+MIN_SECTION_TOKENS = 100
+
+
 class FileTextExtraction:
-    "Utility to extract text from various file formats."
+    """
+    Utility to extract text from various file formats.
+
+    An epub also yields its spine structure in self.sections, which the
+    book repository turns into BookSection rows for parallel-text
+    alignment.  Other formats leave it empty.
+
+    With split_at_sections off, the epub is read exactly as before: one
+    run of text, no page breaks at chapters, and no sections recorded --
+    a section that doesn't begin a page has no exact page to anchor to.
+    """
+
+    def __init__(self, split_at_sections=True):
+        self.split_at_sections = split_at_sections
+        self.sections = []
 
     def get_file_content(self, filename, filestream):
         """
@@ -104,15 +134,71 @@ class FileTextExtraction:
             msg = f"{f} is not utf-8 encoding, please convert it to utf-8 first (error: {str(e)})"
             raise BookImportException(message=msg, cause=e) from e
 
+    def _section_heading(self, item):
+        """
+        The heading of an epub spine item, as (text, level).
+
+        Real heading tags are used in preference to the first line of
+        text: a numbered heading is the strongest signal available when
+        aligning two translations, and guessing at it from prose is how
+        that signal gets lost.  The tag's level is kept too, so books
+        that carry no numbering at all can still be aligned on the shape
+        of their contents.
+        """
+        soup = getattr(item, "soup", None)
+        if soup is None:
+            return None, None
+        for tag in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
+            heading = tag.get_text(" ", strip=True)
+            if heading:
+                return heading[:200], int(tag.name[1])
+        return None, None
+
+    def _read_epub_sections(self, epub):
+        "Read an epub's spine as a list of ExtractedSections."
+        sections = []
+        for package in epub.iterpackages():
+            for item in package.iterspine():
+                text = item.get_text().strip()
+                if not text:
+                    continue
+                title, level = self._section_heading(item)
+                sections.append(
+                    ExtractedSection(title=title, text=text, level=level)
+                )
+        return sections
+
+    def _has_usable_structure(self, sections):
+        """
+        True if the spine looks like real chapter structure.
+
+        Judged on the substantial sections only, so that a pile of short
+        front matter cannot pass for chapters.  A single substantial
+        section is just the whole book again, which tells alignment
+        nothing.
+
+        Short sections are counted here but never dropped: books built
+        from brief dated entries are made of them, and removing one
+        would remove its text from the book.
+        """
+        substantial = [
+            s for s in sections if len(s.text.split()) >= MIN_SECTION_TOKENS
+        ]
+        return len(substantial) >= 2
+
     def _get_epub_content(self, filename, filestream):
         """
         Get the content of the epub as a single string.
+
+        Sections are separated by the "---" page break marker so that
+        each chapter starts on a fresh page, and recorded in
+        self.sections so their start pages can be stored after
+        pagination.
         """
-        content = ""
         try:
             if hasattr(filestream, "seekable"):
                 epub = Epub(stream=filestream)
-                content = epub.get_text()
+                sections = self._read_epub_sections(epub)
             else:
                 # We get a SpooledTemporaryFile from the form but this doesn't
                 # implement all file-like methods until python 3.11. So we need
@@ -121,11 +207,17 @@ class FileTextExtraction:
                     filestream.seek(0)
                     tf.write(filestream.read())
                     epub = Epub(stream=tf)
-                    content = epub.get_text()
+                    sections = self._read_epub_sections(epub)
         except EpubError as e:
             msg = f"Could not parse {filename} (error: {str(e)})"
             raise BookImportException(message=msg, cause=e) from e
-        return content
+
+        # Every section's text is kept either way; the only question is
+        # whether the book is paginated at the section boundaries.
+        if self.split_at_sections and self._has_usable_structure(sections):
+            self.sections = sections
+            return "\n---\n".join(s.text for s in sections)
+        return "\n".join(s.text for s in sections).strip()
 
     def _get_pdf_content(self, filename, filestream):
         "Get content as a single string from a PDF file using PyPDF2."
@@ -247,7 +339,9 @@ class Service:
             if p is None:
                 raise BookImportException(f"Must set {fldname}")
 
-        fte = FileTextExtraction()
+        fte = FileTextExtraction(
+            split_at_sections=getattr(book, "split_at_sections", True)
+        )
         if book.text_source_path:
             _raise_if_file_missing(book.text_source_path, "text_source_path")
             tsp = book.text_source_path
@@ -259,6 +353,9 @@ class Service:
             book.text = fte.get_file_content(
                 book.text_stream_filename, book.text_stream
             )
+
+        # Structure the extractor found, if the format carries any.
+        book.sections = fte.sections
 
         if book.audio_source_path:
             _raise_if_file_missing(book.audio_source_path, "audio_source_path")

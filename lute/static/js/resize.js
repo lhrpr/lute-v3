@@ -8,6 +8,21 @@ const wordFrame = document.getElementById("wordframeid");
 const dictFramesCont = document.getElementById("dictframes");
 const dictContainer = document.querySelector(".dictcontainer");
 
+// A companion pane makes a third column, and the three are tiled to
+// fixed widths in CSS.  The saved left/right split knows nothing about
+// that column, so applying it would slide the text underneath the
+// companion and the companion underneath the dictionary -- which then
+// paints over it, and its buttons stop taking clicks.  While a parallel
+// text is shown the panes keep their CSS widths and the splitter, which
+// is hidden anyway, does nothing.
+//
+// A function, not a cached value: the reader can toggle the companion
+// pane on and off without a page reload, so this has to reflect the
+// class as it is right now, not as it was when the script loaded.
+function readPaneHasCompanion() {
+  return readPaneContainer.classList.contains("has-companion");
+}
+
 applyInitialPaneSizes();
 
 function resizeCol(e){
@@ -87,6 +102,7 @@ if (mediaTablet.matches) {
 }
 
 readPaneRight.addEventListener("mousedown", function(e){
+  if (readPaneHasCompanion()) return;
   if (e.offsetX < borderWidth) {
     setIFrameStatus("none");
     mouse_pos = e.x;
@@ -97,8 +113,9 @@ readPaneRight.addEventListener("mousedown", function(e){
 
 // double click -> widen to 95% temporarily (doesn't save state)
 readPaneRight.addEventListener("dblclick", function(e){
+  if (readPaneHasCompanion()) return;
   if (e.target != e.currentTarget) return; // fixes: clicking dict tabs resizes panes
-  
+
   if (e.offsetX < borderWidth) {
     // if the width is 95% then return to the last width value
     if (readPaneLeft.style.width == "95%") {
@@ -182,6 +199,12 @@ function getWordFrameHeightPercentage() {
 }
 
 function applyInitialPaneSizes() {
+  // Guarded here rather than at the call sites: this is called again
+  // every time the term form is opened (lute.js _show_wordframe_url),
+  // and a two-pane split applied then hands the companion's column to
+  // the dictionary, which lands on top of the companion's controls.
+  if (readPaneHasCompanion()) return;
+
   widthDefault = getTextWidthPercentage();
   trHeightDefault = getWordFrameHeightPercentage();
 

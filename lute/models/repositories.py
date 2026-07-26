@@ -2,12 +2,12 @@
 Repositories.
 """
 
-from sqlalchemy import text as sqltext, and_, func
+from sqlalchemy import text as sqltext, and_, or_, func
 from lute.db import db
 from lute.models.setting import UserSetting, BackupSettings, SystemSetting
 from lute.models.language import Language
 from lute.models.term import Term, TermTag
-from lute.models.book import Book, BookTag
+from lute.models.book import Book, BookTag, BookPair
 
 
 class SettingRepositoryBase:
@@ -242,3 +242,30 @@ class BookRepository:
             .filter(and_(Book.title == book_title, Book.language_id == language_id))
             .first()
         )
+
+
+class BookPairRepository:
+    "Repository."
+
+    def __init__(self, session):
+        self.session = session
+
+    def find_for_book(self, book_id):
+        "Get the pair this book belongs to, from either side, or None."
+        return (
+            self.session.query(BookPair)
+            .filter(
+                or_(
+                    BookPair.primary_bk_id == book_id,
+                    BookPair.companion_bk_id == book_id,
+                )
+            )
+            .first()
+        )
+
+    def delete_for_book(self, book_id):
+        "Unpair a book, if it is paired."
+        pair = self.find_for_book(book_id)
+        if pair is not None:
+            self.session.delete(pair)
+        return pair is not None

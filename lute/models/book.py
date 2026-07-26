@@ -61,6 +61,12 @@ class Book(
         cascade="all, delete-orphan",
     )
     book_tags = db.relationship("BookTag", secondary="booktags")
+    sections = db.relationship(
+        "BookSection",
+        back_populates="book",
+        order_by="BookSection.order",
+        cascade="all, delete-orphan",
+    )
 
     def __init__(self, title=None, language=None, source_uri=None):
         self.title = title
@@ -370,6 +376,83 @@ class TextBookmark(db.Model):
     title = db.Column("TbTitle", db.Text, nullable=False)
 
     text = db.relationship("Text", back_populates="bookmarks")
+
+
+class BookSection(db.Model):
+    """
+    A structural division of a book, e.g. a chapter.
+
+    Recorded at import from the epub spine, when the file has usable
+    structure.  Sections always begin on a page boundary, because the
+    importer separates them with the "---" page break that
+    Repository._split_text_at_page_breaks honours.
+    """
+
+    __tablename__ = "booksections"
+
+    id = db.Column("BsID", db.Integer, primary_key=True)
+    bk_id = db.Column(
+        "BsBkID",
+        db.Integer,
+        db.ForeignKey("books.BkID", ondelete="CASCADE"),
+        nullable=False,
+    )
+    order = db.Column("BsOrder", db.Integer, nullable=False)
+    title = db.Column("BsTitle", db.String(200), nullable=True)
+    start_page = db.Column("BsStartPage", db.Integer, nullable=False)
+    token_count = db.Column("BsTokenCount", db.Integer, nullable=False, default=0)
+    # Heading tag level, 1-6.  Only its rank within the book is
+    # meaningful; see lute.parallel.alignment.assign_depths.
+    level = db.Column("BsLevel", db.Integer, nullable=True)
+
+    book = db.relationship("Book", back_populates="sections")
+
+    def __repr__(self):
+        return f"<BookSection {self.order} {self.title!r} p{self.start_page}>"
+
+
+class BookPair(db.Model):
+    """
+    Two books read side by side, in different languages.
+
+    A book belongs to at most one pair, from either side: opening either
+    book offers the other as its companion, with the anchors inverted
+    when read from the companion's side.
+    """
+
+    __tablename__ = "bookpairs"
+
+    id = db.Column("BpID", db.Integer, primary_key=True)
+    primary_bk_id = db.Column(
+        "BpPrimaryBkID",
+        db.Integer,
+        db.ForeignKey("books.BkID", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    companion_bk_id = db.Column(
+        "BpCompanionBkID",
+        db.Integer,
+        db.ForeignKey("books.BkID", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    # JSON [[primary_page, companion_page], ...]; see lute.parallel.mapping.
+    page_map = db.Column("BpPageMap", db.Text, nullable=True)
+
+    primary_book = db.relationship("Book", foreign_keys=[primary_bk_id])
+    companion_book = db.relationship("Book", foreign_keys=[companion_bk_id])
+
+    def other_book_id(self, book_id):
+        "The id of the book paired with book_id, or None."
+        if book_id == self.primary_bk_id:
+            return self.companion_bk_id
+        if book_id == self.companion_bk_id:
+            return self.primary_bk_id
+        return None
+
+    def __repr__(self):
+        return f"<BookPair {self.primary_bk_id}+{self.companion_bk_id}>"
 
 
 class BookStats(db.Model):

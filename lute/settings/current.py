@@ -40,8 +40,11 @@ def refresh_global_settings(session):
         "show_highlights",
         "term_popup_promote_parent_translation",
         "term_popup_show_components",
+        "term_parent_autocomplete",
         "use_ankiconnect",
         "show_streak_on_home",
+        "ai_suggestions_enabled",
+        "deepl_enabled",
     ]
     for k in boolkeys:
         current_settings[k] = current_settings[k] == "1"

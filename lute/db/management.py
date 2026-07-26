@@ -105,9 +105,29 @@ def add_default_user_settings(session, default_user_backup_path):
         # Term popups:
         "term_popup_promote_parent_translation": True,
         "term_popup_show_components": True,
+        # Parent term field (reading pane / term forms): keep the
+        # suggestion dropdown but don't silently replace typed text
+        # via Tab/Right-arrow autocomplete.
+        "term_parent_autocomplete": False,
         # Anki:
         "use_ankiconnect": False,
         "ankiconnect_url": "http://127.0.0.1:8765",
+        # AI translation suggestions:
+        "ai_suggestions_enabled": False,
+        "ai_provider": "gemini",
+        "ai_api_key": "",
+        "ai_model": (
+            "gemini-3.5-flash,gemini-3-flash-preview,"
+            "gemini-3.1-flash-lite,gemini-2.5-flash-lite"
+        ),
+        "ai_base_url": "",
+        "ai_trigger": "auto_new",
+        "ai_target_language": "English",
+        "ai_explanation_language": "",
+        # DeepL sentence/paragraph translation:
+        "deepl_enabled": False,
+        "deepl_api_key": "",
+        "deepl_target_lang": "EN-US",
     }
     add_initial_vals_if_needed(keys_and_defaults)
 

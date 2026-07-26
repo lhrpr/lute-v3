@@ -4,7 +4,14 @@ Book create/edit forms.
 
 import json
 from flask import request
-from wtforms import StringField, SelectField, TextAreaField, IntegerField, HiddenField
+from wtforms import (
+    StringField,
+    SelectField,
+    TextAreaField,
+    IntegerField,
+    HiddenField,
+    BooleanField,
+)
 from wtforms import ValidationError
 from wtforms.validators import DataRequired, Length, NumberRange
 from flask_wtf import FlaskForm
@@ -65,6 +72,15 @@ class NewBookForm(FlaskForm):
         "Words per page",
         validators=[NumberRange(min=1, max=1500)],
         default=250,
+    )
+    split_at_sections = BooleanField(
+        "Start a new page at each chapter",
+        description=(
+            "Epub only.  Pages are still split by the word count above; "
+            "this just stops chapters running on from the previous page.  "
+            "Required to auto-align a parallel text."
+        ),
+        default=True,
     )
     source_uri = StringField("Text source", validators=[Length(max=1000)])
     audiofile = FileField(

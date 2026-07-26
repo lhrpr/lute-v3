@@ -62,6 +62,8 @@ from lute.settings.routes import bp as settings_bp
 from lute.themes.routes import bp as themes_bp
 from lute.stats.routes import bp as stats_bp
 from lute.cli.commands import bp as cli_bp
+from lute.ai.routes import bp as ai_bp
+from lute.parallel.routes import bp as parallel_bp
 
 
 def _setup_app_dir(dirname, readme_content):
@@ -123,13 +125,22 @@ def _add_base_routes(app, app_config):
         us_repo = UserSettingRepository(db.session)
         bs = us_repo.get_backup_settings()
         have_languages = len(db.session.query(Language).all()) > 0
+
+        # Never expose secret keys (e.g. LLM API keys) to the browser.
+        # current_settings is serialized into the global LUTE_USER_SETTINGS var.
+        client_settings = {
+            k: v
+            for k, v in current_settings.items()
+            if not k.endswith("_api_key")
+        }
+
         ret = {
             "have_languages": have_languages,
             "backup_enabled": bs.backup_enabled,
             "backup_directory": bs.backup_dir,
             "backup_last_display_date": bs.last_backup_display_date,
             "backup_time_since": bs.time_since_last_backup,
-            "user_settings": json.dumps(current_settings),
+            "user_settings": json.dumps(client_settings),
             "user_hotkeys": json.dumps(current_hotkeys),
         }
         return ret
@@ -349,6 +360,8 @@ def _create_app(app_config, extra_config):
     app.register_blueprint(themes_bp)
     app.register_blueprint(stats_bp)
     app.register_blueprint(cli_bp)
+    app.register_blueprint(ai_bp)
+    app.register_blueprint(parallel_bp)
     if app_config.is_test_db:
         app.register_blueprint(dev_api_bp)
 

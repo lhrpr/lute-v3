@@ -114,13 +114,50 @@ function lute_tagify_utils_setup_parent_tagify(
   // so that hooks can use it.
   var tagify_instance = null;
 
+  // Setting "term_parent_autocomplete" (default off).  When off, the
+  // suggestion dropdown built by _fetch_whitelist still shows, but text
+  // is left exactly as typed: Tagify's accept-on-Tab/Right-arrow is
+  // turned off, and so is the platform's own text correction (see
+  // _disable_native_text_correction below).
+  const _autocomplete_enabled = function() {
+    return !!(
+      typeof LUTE_USER_SETTINGS !== "undefined" &&
+      LUTE_USER_SETTINGS.term_parent_autocomplete
+    );
+  };
+
+  /**
+   * Stop the *platform* rewriting text typed in the tag field.
+   *
+   * Tagify's editable field is a contenteditable <span>, and Tagify
+   * never opts out of native text correction (it only sets
+   * spellcheck=false for "select" mode).  In a WKWebView -- i.e. the
+   * Lute desktop app on macOS -- an unqualified contenteditable is
+   * subject to the system's "Capitalize words automatically" and
+   * "Correct spelling automatically" settings, so typing "red" into the
+   * empty field is committed as "Red".  Plain <input> fields elsewhere
+   * in Lute aren't affected, which is why this looks Lute-specific.
+   */
+  const _disable_native_text_correction = function(mytagify) {
+    const el = mytagify.DOM.input;
+    el.setAttribute('autocapitalize', 'none');
+    el.setAttribute('autocorrect', 'off');
+    el.setAttribute('autocomplete', 'off');
+    el.setAttribute('spellcheck', 'false');
+  };
+
   const make_Tagify_for = function(input) {
+    const accept_on_key = _autocomplete_enabled();
     const base_settings = {
       editTags: false,
       pasteAsTags: false,
       backspace: true,
       addTagOnBlur: true,   // note different
-      autoComplete: { enabled: true, rightKey: true, tabKey: true },
+      autoComplete: {
+        enabled: accept_on_key,
+        rightKey: accept_on_key,
+        tabKey: accept_on_key,
+      },
       delimiters: ';;',  // special delimiter to handle parents with commas.
       enforceWhitelist: false,
       whitelist: [],
@@ -159,6 +196,8 @@ function lute_tagify_utils_setup_parent_tagify(
 
     let settings = { ...base_settings, ...override_base_settings };
     tagify_instance = new Tagify(input, settings);
+    if (!accept_on_key)
+      _disable_native_text_correction(tagify_instance);
     return tagify_instance;
   };
 

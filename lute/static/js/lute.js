@@ -194,8 +194,22 @@ function _show_wordframe_url(url) {
   applyInitialPaneSizes();  // in resize.js
 }
 
+/** Context of the last-clicked term, read by the term form (same origin)
+ * to fetch AI translation suggestions.  See static/js/ai-suggestions.js. */
+window.LUTE_LAST_CLICKED_CONTEXT = null;
+
+let _set_last_clicked_context = function(el, term) {
+  window.LUTE_LAST_CLICKED_CONTEXT = {
+    term: term,
+    sentence: lute_get_sentence_for_element(el),
+    paragraph: lute_get_paragraph_for_element(el),
+    langid: parseInt($(el).data('lang-id')) || 0,
+  };
+};
+
 function show_term_edit_form(el) {
   const wid = parseInt(el.data('wid'));
+  _set_last_clicked_context(el, el.text());
   _show_wordframe_url(`/read/edit_term/${wid}`);
 }
 
@@ -244,6 +258,7 @@ function show_multiword_term_edit_form(selected) {
   if (text == "")
     return;
   const lid = parseInt(selected.eq(0).data('lang-id'));
+  _set_last_clicked_context(selected.eq(0), text);
   // "/" in the term cause problems with routing, so hack a fix.
   const sendtext = text.replace(/\//g, "LUTESLASH");
   _show_wordframe_url(`/read/termform/${lid}/${sendtext}`);
@@ -599,6 +614,15 @@ function _single_tap(el, e) {
 /********************************************/
 // Keyboard navigation.
 
+/** Selector matching "unknown or highlighted" words: terms still being
+ * learned -- status 0 (unknown) through status 5 -- i.e. everything
+ * except Well Known (99) and Ignored (98), which render as plain text.
+ * Uses data-status-class (always present) rather than the status class
+ * itself, so it works whether or not highlights are shown in the DOM. */
+const LUTE_LEARNING_WORD_SELECTOR = [0, 1, 2, 3, 4, 5]
+  .map((s) => `span.word[data-status-class="status${s}"]`)
+  .join(', ');
+
 /** Get the textitems whose span_attribute value matches that of the
  * current active/hovered word.  If span_attribute is null, return
  * all. */
@@ -668,6 +692,26 @@ let _get_textitems_text = function(textitemspans) {
     return ptext.replace(/\u200B/g, '');
   });
   return paratexts.join('\n').trim();
+}
+
+/** Reconstruct the full sentence that a given word element sits in.
+ * Reused for AI suggestion context and Anki exports. */
+let lute_get_sentence_for_element = function(el) {
+  const el_sentence_id = $(el).data('sentence-id');
+  if (el_sentence_id === undefined)
+    return '';
+  const selector = `span.textitem[data-sentence-id="${el_sentence_id}"]`;
+  return _get_textitems_text($(selector).toArray());
+}
+
+/** Reconstruct the full paragraph that a given word element sits in.
+ * Used for the DeepL "translate paragraph" sidebar option. */
+let lute_get_paragraph_for_element = function(el) {
+  const el_paragraph_id = $(el).data('paragraph-id');
+  if (el_paragraph_id === undefined)
+    return '';
+  const selector = `span.textitem[data-paragraph-id="${el_paragraph_id}"]`;
+  return _get_textitems_text($(selector).toArray());
 }
 
 
@@ -856,10 +900,7 @@ function send_selected_terms_to_anki() {
   const word_ids = elements.map(el => $(el).data("wid"));
 
   function _get_sentence(el) {
-    const el_sentence_id = $(el).data('sentence-id');
-    const selector = `span.textitem[data-sentence-id="${el_sentence_id}"]`;
-    const tis = $(selector).toArray();
-    return _get_textitems_text(tis);
+    return lute_get_sentence_for_element(el);
   }
 
   function _get_sentences_dict(elements) {
@@ -1016,12 +1057,10 @@ function handle_keydown (e) {
     return; // Nothing to do.
   }
 
-  const hotkey_name = get_hotkey_name(e);
-  if (hotkey_name == null)
-    return;
-
   const next_incr = _lang_is_left_to_right() ? 1 : -1;
   const prev_incr = -1 * next_incr;
+
+  const hotkey_name = get_hotkey_name(e);
 
   // Map of shortcuts to lambdas:
   let map = {
@@ -1030,6 +1069,8 @@ function handle_keydown (e) {
     "hotkey_NextWord": () => _move_cursor('span.word', next_incr),
     "hotkey_PrevUnknownWord": () => _move_cursor('span.word.status0', prev_incr),
     "hotkey_NextUnknownWord": () => _move_cursor('span.word.status0', next_incr),
+    "hotkey_PrevLearningWord": () => _move_cursor(LUTE_LEARNING_WORD_SELECTOR, prev_incr),
+    "hotkey_NextLearningWord": () => _move_cursor(LUTE_LEARNING_WORD_SELECTOR, next_incr),
     "hotkey_PrevSentence": () => _move_cursor('span.word.sentencestart', prev_incr),
     "hotkey_NextSentence": () => _move_cursor('span.word.sentencestart', next_incr),
     "hotkey_StatusUp": () => increment_status_for_selected_elements(+1),
@@ -1064,14 +1105,35 @@ function handle_keydown (e) {
     "hotkey_NextPage": () => goto_relative_page(1),
   }
 
-  if (hotkey_name in map) {
+  if (hotkey_name != null && hotkey_name in map) {
     // Override any existing event - e.g., if "up" arrow is in the map,
     // don't scroll screen.
     e.preventDefault();
     map[hotkey_name]();
+    return;
   }
-  else {
-    // console.log(`hotkey "${hotkey_name}" not found in map`);
+
+  // Built-in fallback: Option/Alt + Left/Right jumps to the next/previous
+  // "unknown or highlighted" word (status 0-5), skipping known/ignored.
+  // This runs only if the user hasn't bound the pressed key to some other
+  // action above, so custom bindings still win.  Option (Mac) and Alt
+  // (Windows/Linux) both surface as altKey, so one check covers both.
+  // Option/Alt is used instead of Cmd/Ctrl because the reading workflow
+  // presses letter keys right after navigating (e.g. W = Well Known), and
+  // with Cmd held that becomes Cmd+W (closes the tab) / Cmd+Q (quits).
+  // It's kept as a hardcoded binding (rather than a configurable default)
+  // so it works out of the box without assigning a default that could
+  // clash with a user's existing shortcut.  See hotkey_data.py for the
+  // full architecture note.  preventDefault also suppresses the browser's
+  // Alt+Arrow history navigation.  jQuery's normalized event doesn't
+  // expose .code, so fall back to originalEvent.code (same pattern as
+  // get_pressed_keys_as_string).
+  const key_code = e.code ?? e.originalEvent?.code;
+  if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey &&
+      (key_code === 'ArrowLeft' || key_code === 'ArrowRight')) {
+    e.preventDefault();
+    const dir = (key_code === 'ArrowRight') ? next_incr : prev_incr;
+    _move_cursor(LUTE_LEARNING_WORD_SELECTOR, dir);
   }
 }
 
@@ -1121,9 +1183,19 @@ function post_bulk_update(updates) {
   const first_status = updates[0].new_status;
   const selected_ids = $('span.kwordmarked').toArray().map(el => $(el).attr('id'));
 
+  // Cursor position when this update was kicked off.  The bulk update is
+  // async, and the user may arrow to a different word before it returns.
+  // If they have, we must _not_ yank the selection back to the words that
+  // were just updated (reset_cursor_marker already restored the cursor to
+  // the new position).  See cursor_has_moved() below.
+  const start_cursor_order = LUTE_CURR_TERM_DATA_ORDER;
+  let cursor_has_moved = () => LUTE_CURR_TERM_DATA_ORDER !== start_cursor_order;
+
   data = JSON.stringify({ updates: updates });
 
   let re_mark_selected_ids = function() {
+    if (cursor_has_moved())
+      return;
     for (let i = 0; i < selected_ids.length; i++) {
       let el = $(`#${selected_ids[i]}`);
       el.addClass('kwordmarked');
@@ -1148,7 +1220,7 @@ function post_bulk_update(updates) {
     contentType: 'application/json',
     success: function(response) {
       reload_text_div();
-      if (elements.length == 1) {
+      if (elements.length == 1 && !cursor_has_moved()) {
         update_term_form(firstel, first_status);
       }
     },

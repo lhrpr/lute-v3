@@ -1,0 +1,42 @@
+[package]
+name = "lute-desktop"
+version = "3.10.3"
+description = "Lute v3 desktop shell"
+authors = ["Lute contributors"]
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Used for an atexit safety net that kills the spawned Lute server no matter
+# how the process exits (macOS app-quit bypasses Tauri's exit events).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# Used to add the JavaScript dialog callbacks that wry leaves unimplemented,
+# so alert()/confirm()/prompt() work. Versions match wry's, so no extra build.
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSString"] }
+objc2-app-kit = { version = "0.3", features = [
+  "NSAlert",
+  "NSControl",
+  "NSResponder",
+  "NSTextField",
+  "NSView",
+] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

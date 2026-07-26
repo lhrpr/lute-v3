@@ -66,6 +66,12 @@ function incrementLineHeight(delta) {
 }
 
 function setTextWidth(factor) {
+  // The text/dictionary split does not apply while a parallel text is
+  // shown: the three columns are tiled to fixed widths in CSS, and
+  // widening the text here would slide it under the companion pane.
+  // See readPaneHasCompanion in resize.js.
+  if (readPaneHasCompanion) return;
+
   const STORAGE_KEY = "textWidth";
   const currentWidth = getFromLocalStorage(STORAGE_KEY, widthDefault);
   const newWidth = clamp(currentWidth * factor, 25, 95);

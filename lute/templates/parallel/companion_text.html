@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Companion text</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/parallel-styles.css') }}" />
+    <link rel="stylesheet" href="/theme/current">
+  </head>
+  <body class="companion-text-body">
+    <div class="companion-text" {% if is_rtl %}dir="rtl"{% endif %}>
+      {% for p in paragraphs %}
+      <p>{{ p }}</p>
+      {% endfor %}
+    </div>
+  </body>
+</html>

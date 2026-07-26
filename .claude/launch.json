@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lute-dev",
+      "runtimeExecutable": "/Users/liamharper/Documents/GitHub/lute-v3-mod/.venv/bin/python",
+      "runtimeArgs": ["devstart.py", "--port", "5001"],
+      "port": 5001
+    }
+  ]
+}

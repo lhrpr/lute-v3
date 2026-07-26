@@ -91,6 +91,7 @@
     form.stop_audio_on_term_form_open,
     form.show_streak_on_home,
     form.stats_calc_sample_size,
+    form.term_parent_autocomplete,
     ]%}
     <tr>
       <td>{{ f.label }}</td>
@@ -137,6 +138,69 @@
         <div style="margin-top: 5px" id="ankiconnect_result"></div>
       </td>
     </tr>
+
+    <tr>
+      <td>
+        <h2>AI translation suggestions</h2>
+      </td>
+    </tr>
+    <tr>
+      <td colspan="2">
+        <blockquote style="width:60%">
+          <p>Powers two features: clickable candidate meanings in the term form,
+            and an <strong>Explain</strong> panel in the reading sidebar (next to
+            Wiktionary etc.) that explains the highlighted word or phrase in the
+            context of its sentence.  Get a free Gemini API key from
+            <a href="https://aistudio.google.com/apikey" target="_blank"
+            >Google AI Studio</a>.  The key is stored locally and never sent to
+            the browser.</p>
+        </blockquote>
+      </td>
+    </tr>
+    {% for f in [
+    form.ai_suggestions_enabled,
+    form.ai_provider,
+    form.ai_api_key,
+    form.ai_model,
+    form.ai_base_url,
+    form.ai_trigger,
+    form.ai_target_language,
+    form.ai_explanation_language,
+    ]%}
+    <tr>
+      <td>{{ f.label }}</td>
+      <td>{{ f(class="form-control") }}</td>
+    </tr>
+    {% endfor %}
+
+    <tr>
+      <td>
+        <h2>DeepL translation</h2>
+      </td>
+    </tr>
+    <tr>
+      <td colspan="2">
+        <blockquote style="width:60%">
+          <p>Adds a <strong>DeepL</strong> tab in the reading sidebar that
+            translates the current sentence or paragraph on demand (pick which
+            from the tab's dropdown).  Get an API key by signing up for
+            <a href="https://www.deepl.com/pro-api" target="_blank"
+            >DeepL API</a> (a free plan is available).  Free keys end in
+            <code>:fx</code>; the correct endpoint is chosen automatically.  The
+            key is stored locally and never sent to the browser.</p>
+        </blockquote>
+      </td>
+    </tr>
+    {% for f in [
+    form.deepl_enabled,
+    form.deepl_api_key,
+    form.deepl_target_lang,
+    ]%}
+    <tr>
+      <td>{{ f.label }}</td>
+      <td>{{ f(class="form-control") }}</td>
+    </tr>
+    {% endfor %}
 
     <tr>
       <td>

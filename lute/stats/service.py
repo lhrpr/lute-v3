@@ -96,6 +96,59 @@ def get_table_data(session):
     return ret
 
 
+def _get_known_counts_per_lang(session):
+    """
+    Return dict of lang name to dict[date_yyyymmdd]: count of words
+    marked known.
+
+    A word is considered "known" if its current status is Learned (5)
+    or Well Known (99).  The count is bucketed by the date the word's
+    status last changed (WoStatusChanged).  Note that only the *last*
+    status change is stored, so a word that was later un-known no longer
+    counts, and its "known" date is the date it most recently changed.
+
+    WoStatusChanged is stored in UTC (SQLite CURRENT_TIMESTAMP), so the
+    'localtime' modifier converts it to local time to match the local
+    'today' used when bucketing into intervals.
+    """
+    ret = {}
+    sql = """
+    select LgName as lang,
+           strftime('%Y-%m-%d', WoStatusChanged, 'localtime') as dt,
+           count(*) as count
+    from words
+    inner join languages on LgID = WoLgID
+    where WoStatus in (5, 99)
+    group by lang, dt
+    """
+    result = session.execute(text(sql)).all()
+    for row in result:
+        langname = row[0]
+        if langname not in ret:
+            ret[langname] = {}
+        ret[langname][row[1]] = int(row[2])
+    return ret
+
+
+def get_known_table_data(session):
+    "Count of words marked known by lang in time intervals."
+    raw_data = _get_known_counts_per_lang(session)
+
+    ret = []
+    for langname, knownbydate in raw_data.items():
+        ret.append({"name": langname, "counts": _readcount_by_date(knownbydate)})
+    return ret
+
+
+def get_known_chart_data(session):
+    "Get running total of words marked known over time for each language."
+    raw_data = _get_known_counts_per_lang(session)
+    chartdata = {}
+    for k, v in raw_data.items():
+        chartdata[k] = _charting_data(v)
+    return chartdata
+
+
 def get_reading_streak(session):
     "Calculates the current reading streak in days."
     sql = """

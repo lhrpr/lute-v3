@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block title %}Parallel text{% endblock %}
+{% block header %}Read &ldquo;{{ book.title }}&rdquo; in parallel{% endblock %}
+
+{% block body %}
+
+{% if existing %}
+<p>
+  Currently paired with <strong>{{ existing.book.title }}</strong>
+  ({{ existing.anchors|length }} anchor{{ '' if existing.anchors|length == 1 else 's' }}).
+</p>
+<p>
+  <a href="/parallel/review/{{ book.id }}">Review anchors</a>
+  &nbsp;|&nbsp;
+  <a href="#" onclick="document.getElementById('unpairform').submit(); return false;">Unpair</a>
+</p>
+<form id="unpairform" method="post" action="/parallel/unpair/{{ book.id }}"></form>
+<hr>
+<p>Choose a different book to replace the current pair:</p>
+{% endif %}
+
+{% if candidates|length == 0 %}
+<p>
+  There are no books in other languages to pair with.  Import a
+  translation of this book first.
+</p>
+<p><a href="/">Home</a></p>
+{% else %}
+<form method="post">
+  <table id="parallel-pair">
+    <tbody>
+      <tr>
+        <td><label for="companion_id">Companion book</label></td>
+        <td>
+          <select id="companion_id" name="companion_id" class="form-control">
+            {% for c in candidates %}
+            <option value="{{ c.id }}">{{ c.title }} ({{ c.language.name }})</option>
+            {% endfor %}
+          </select>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="form-text">
+    Lute will try to line the two books up using their chapter
+    structure, and show you what it found before saving anything.
+  </p>
+
+  <button type="submit" class="btn btn-primary">Pair books</button>
+  <button onclick="window.location = '/'; return false;" class="btn">Cancel</button>
+</form>
+{% endif %}
+
+{% endblock %}

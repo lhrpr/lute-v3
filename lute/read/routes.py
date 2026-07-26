@@ -10,6 +10,7 @@ from lute.term.routes import handle_term_form
 from lute.settings.current import current_settings
 from lute.models.book import Text
 from lute.models.repositories import BookRepository, LanguageRepository
+from lute.parallel.service import Service as ParallelService
 from lute.db import db
 
 
@@ -25,8 +26,13 @@ def _render_book_page(book, pagenum, track_page_open=True):
     lang_repo = LanguageRepository(db.session)
     term_dicts = lang_repo.all_dictionaries()[lang.id]["term"]
 
+    companion = ParallelService(db.session).get_companion(book)
+    companion_page = companion.page_for(pagenum) if companion else None
+
     return render_template(
         "read/index.html",
+        companion=companion,
+        companion_page=companion_page,
         hide_top_menu=True,
         is_rtl=lang.right_to_left,
         html_title=book.title,

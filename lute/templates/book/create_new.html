@@ -66,12 +66,75 @@
       <td> {{ form.threshold_page_tokens(class="form-control") }}</td>
     </tr>
 
+    <tr>
+      <td> {{ form.split_at_sections.label }}</td>
+      <td>
+        {{ form.split_at_sections() }}
+        <span class="form-text">{{ form.split_at_sections.description }}</span>
+      </td>
+    </tr>
+
   </tbody>
   </table>
 
   <button id="save" type="submit" class="btn btn-primary">Save</button>
   <button id="cancel" onclick="window.location = '/'; return false;" class="btn">Cancel</button>
 </form>
+
+<!-- Shown while the book is being imported.  Parsing/splitting a file (e.g. an
+     epub) blocks for a few seconds, and the desktop shell has no browser
+     loading indicator, so without this the page looks frozen. -->
+<div id="book-import-overlay">
+  <div class="book-import-box">
+    <div class="book-import-spinner"></div>
+    <div>
+      Importing your book&hellip;
+      <div class="book-import-sub">Large files can take a few seconds. Please wait.</div>
+    </div>
+  </div>
+</div>
+
+<style>
+  #book-import-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+  }
+  .book-import-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    max-width: 320px;
+    padding: 24px 32px;
+    background: #fff;
+    color: #1b1b1b;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  }
+  .book-import-sub {
+    margin-top: 4px;
+    color: #6b7280;
+    font-size: 13px;
+  }
+  .book-import-spinner {
+    width: 34px;
+    height: 34px;
+    border: 3px solid rgba(0, 0, 0, 0.15);
+    border-top-color: #1565c0;
+    border-radius: 50%;
+    animation: book-import-spin 0.9s linear infinite;
+  }
+  @keyframes book-import-spin {
+    to { transform: rotate(360deg); }
+  }
+</style>
 
 
 <script type="text/javascript">
@@ -116,6 +179,20 @@
     }
     $('#textfile').on('change', function() {
       autoFillTitle();
+    });
+
+    // Show a "busy" overlay on submit and block repeat submits.  Importing a
+    // file parses and splits it, which blocks the request for a few seconds;
+    // without feedback (esp. in the chrome-less desktop window) the page looks
+    // frozen and users re-click Save, creating duplicate books.
+    let submitting = false;
+    $('form').on('submit', function(e) {
+      if (submitting) {
+        e.preventDefault();
+        return false;
+      }
+      submitting = true;
+      $('#book-import-overlay').css('display', 'flex');
     });
   });
 </script>

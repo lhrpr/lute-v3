@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+
+{% block title %}Review anchors{% endblock %}
+{% block header %}Anchors for &ldquo;{{ book.title }}&rdquo;{% endblock %}
+
+{% block body %}
+
+<p>
+  Matching <strong>{{ book.title }}</strong> against
+  <strong>{{ companion.title }}</strong>.
+</p>
+
+{% if not has_structure %}
+<p class="flash-notice-narrow">
+  Neither book has usable chapter structure, so there is nothing to line
+  up automatically.  This is normal for epubs that hold the whole text in
+  one file, or for books imported from plain text.
+</p>
+<p>
+  The pair still works: the companion page is worked out proportionally,
+  and you can anchor pages by hand as you read.
+</p>
+<p>
+  <a href="/read/{{ book.id }}">Start reading</a>
+</p>
+{% else %}
+
+<p>
+  Ticked rows will be saved as anchors.  Rows without a tick are left to
+  proportional interpolation &mdash; you can anchor them by hand while
+  reading.
+</p>
+
+<form method="post">
+  <table id="parallel-review" class="table">
+    <thead>
+      <tr>
+        <th>Anchor</th>
+        <th>{{ book.title }}</th>
+        <th>{{ companion.title }}</th>
+        <th>Confidence</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a, b, confidence in alignment %}
+      {% set is_proposed = a and b and (a.start_page, b.start_page) in proposed %}
+      <tr class="{% if not a or not b %}parallel-gap{% elif not is_proposed %}parallel-low{% endif %}">
+        <td>
+          {% if a and b and a.start_page and b.start_page %}
+          <input type="checkbox" name="anchor"
+                 value="{{ a.start_page }}:{{ b.start_page }}"
+                 {% if is_proposed %}checked{% endif %}>
+          {% endif %}
+        </td>
+        <td>
+          {% if a %}
+            {{ a.title or "(untitled)" }}
+            <span class="parallel-page">p.{{ a.start_page }}</span>
+          {% else %}
+            <em>&mdash; not in this book &mdash;</em>
+          {% endif %}
+        </td>
+        <td>
+          {% if b %}
+            {{ b.title or "(untitled)" }}
+            <span class="parallel-page">p.{{ b.start_page }}</span>
+          {% else %}
+            <em>&mdash; not in this book &mdash;</em>
+          {% endif %}
+        </td>
+        <td>
+          {% if a and b %}
+            {{ (confidence * 100) | round | int }}%
+            {% if confidence >= min_confidence and not is_proposed %}
+            <span class="parallel-page"
+                  title="The chapter numbers agree, but the two pages are too
+                         far apart in their books for this to be the same
+                         place.  Roman part numbers and day-of-month numbers
+                         collide this way.">— wrong position</span>
+            {% endif %}
+          {% else %}
+            &mdash;
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <button type="submit" class="btn btn-primary">Save anchors</button>
+  <a href="/read/{{ book.id }}" class="btn">Skip</a>
+</form>
+{% endif %}
+
+{% endblock %}

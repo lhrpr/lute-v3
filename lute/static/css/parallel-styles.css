@@ -1,0 +1,250 @@
+/* Parallel-text reading: the companion pane, and the anchor review table. */
+
+/* The reading view is not a grid: the left pane sits in normal flow and
+   the right pane is fixed against the viewport edge.  A companion adds a
+   third column by narrowing both and fixing itself between them.
+
+   Widths are plain percentages on purpose.  --read-grid-margin is
+   unitless, so any calc() involving it is invalid and silently dropped
+   (hence the "do not use calc here" note where it is defined), which
+   would leave a column sized by its contents. */
+
+.has-companion div#read_pane_left {
+    width: 34%;
+}
+
+.has-companion div#read_pane_right {
+    width: 33%;
+}
+
+/* The three columns are tiled to fixed percentages, so dragging the
+   left/right splitter would leave the companion overlapping whichever
+   neighbour it was pushed into.  The splitter is hidden while a
+   companion is shown rather than left to produce a broken layout. */
+.has-companion #read_pane_right::after {
+    display: none;
+}
+
+/* The content-width buttons drive the same two-pane split as the
+   splitter, so they are hidden alongside it rather than left in the
+   menu doing nothing. */
+.has-companion .text-options-btn-container:has(.width-plus) {
+    display: none;
+}
+
+/* Focus mode hides the dictionary pane.  The companion is the other
+   half of what is being read rather than a lookup aid, so it stays, and
+   the two texts split the freed column evenly instead of keeping the
+   3-column ratio (which favoured the primary text to leave room for a
+   dictionary that's no longer there) or centring under it. */
+.focus-mode-active.has-companion div#read_pane_left {
+    width: 50%;
+    margin: 0;
+}
+
+.focus-mode-active.has-companion #read_pane_companion {
+    left: 50%;
+    width: 50%;
+}
+
+/* A column, not a grid: the search box is hidden until it is wanted,
+   and a grid's rows are handed out to the children that exist, so the
+   frame landed in a row meant for the search box and collapsed to an
+   iframe's default height.
+
+   Hidden by default and only switched on under .has-companion, so
+   toggling that one class on the reader is enough to flip between
+   the two-column and three-column layouts -- the companion pane
+   disappears along with the widths that made room for it. */
+#read_pane_companion {
+    display: none;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 34%;
+    width: 33%;
+    height: 100%;
+    box-sizing: border-box;
+    border-left: 2px solid #dbefff;
+    border-right: 2px solid #dbefff;
+    background-color: var(--background-color);
+}
+
+.has-companion #read_pane_companion {
+    display: flex;
+}
+
+/* Flex items are min-content wide at their narrowest, and the title and
+   the anchor state are both nowrap, so without this the header pushes
+   the pane's contents out over the dictionary pane -- which then paints
+   on top of them, and the buttons stop taking clicks. */
+#read_pane_companion > * {
+    min-width: 0;
+}
+
+#companion_header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.6rem 0.8rem 0.2rem 0.8rem;
+    border-bottom: 1px solid #d7e6f4;
+}
+
+#companion_title {
+    font-weight: bold;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#companion_state {
+    font-size: 0.8em;
+    white-space: nowrap;
+}
+
+/* Drift between distant anchors is invisible until it is bad, so the
+   two states are coloured differently rather than just worded. */
+.companion-anchored {
+    color: #2e7d32;
+}
+
+.companion-interpolated {
+    color: #8a6d3b;
+}
+
+#companion_controls {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.4rem 0.8rem;
+    flex-wrap: wrap;
+}
+
+#companion_controls button {
+    cursor: pointer;
+    padding: 0.15rem 0.5rem;
+    border: 1px solid #d7e6f4;
+    border-radius: 3px;
+    background-color: aliceblue;
+}
+
+#companion_controls button:hover {
+    background-color: #d7e6f4;
+}
+
+#companion_page_indicator {
+    min-width: 4rem;
+    text-align: center;
+    font-size: 0.9em;
+}
+
+#companion_search {
+    padding: 0 0.8rem 0.4rem 0.8rem;
+}
+
+#companion_search_input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.3rem;
+}
+
+#companion_search_results {
+    max-height: 12rem;
+    overflow-y: auto;
+}
+
+.companion-search-hit {
+    cursor: pointer;
+    padding: 0.3rem;
+    border-bottom: 1px solid #eee;
+    font-size: 0.85em;
+}
+
+.companion-search-hit:hover {
+    background-color: aliceblue;
+}
+
+.companion-search-page {
+    font-weight: bold;
+    margin-right: 0.4rem;
+}
+
+.companion-search-snippet {
+    color: #555;
+}
+
+.companion-search-empty {
+    padding: 0.3rem;
+    font-size: 0.85em;
+    color: #777;
+}
+
+#companion_frame {
+    flex: 1;
+    /* Flex items floor at their content height, and an iframe's is its
+       default 150px, so the frame needs to be told it may be shorter
+       than that before "fill what is left" means anything. */
+    min-height: 0;
+    width: 100%;
+    border: 0;
+}
+
+/* The companion page itself, rendered in the frame. */
+
+.companion-text-body {
+    margin: 0;
+    padding: 1rem 1.2rem;
+}
+
+.companion-text p {
+    margin: 0 0 0.8rem 0;
+    line-height: 1.5;
+}
+
+/* Anchor review table. */
+
+#parallel-review td,
+#parallel-review th {
+    padding: 0.3rem 0.6rem;
+    text-align: left;
+}
+
+.parallel-page {
+    color: #777;
+    font-size: 0.85em;
+    margin-left: 0.3rem;
+}
+
+/* A gap is a section with no counterpart -- a foreword the other
+   edition lacks.  Nothing is wrong with it, so it is muted, not warned. */
+.parallel-gap {
+    color: #999;
+    background-color: #fafafa;
+}
+
+/* A low-confidence match is a real guess, and does want a second look. */
+.parallel-low {
+    background-color: #fff8e1;
+}
+
+@media screen and (max-width: 980px) {
+    /* No room for three columns: the companion stacks under the text,
+       and the right pane keeps its full-screen overlay behaviour. */
+    .has-companion div#read_pane_left {
+        width: unset !important;
+    }
+
+    #read_pane_companion {
+        position: static;
+        width: 100%;
+        height: 60vh;
+        border-left: 0;
+        border-right: 0;
+        border-top: 2px solid #dbefff;
+    }
+
+    .has-companion div#read_pane_right {
+        width: 100% !important;
+    }
+}

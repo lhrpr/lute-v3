@@ -45,6 +45,12 @@ Navigation:
   desc: Move to previous unknown word
 - hotkey: hotkey_NextUnknownWord
   desc: Move to next unknown word
+# hotkey_Prev/NextLearningWord also have a built-in Option/Alt + Left/Right
+# binding hardcoded in static/js/lute.js (see the note by _initial_values).
+- hotkey: hotkey_PrevLearningWord
+  desc: Move to previous unknown or highlighted word (built-in Option/Alt + Left)
+- hotkey: hotkey_NextLearningWord
+  desc: Move to next unknown or highlighted word (built-in Option/Alt + Right)
 - hotkey: hotkey_PrevSentence
   desc: Move to previous sentence
 - hotkey: hotkey_NextSentence
@@ -102,6 +108,36 @@ Update status:
 # Any new hotkeys added *MUST NOT* have defaults assigned, as users
 # may have already setup their hotkeys, and we can't assume that a
 # given key combination is free:
+#
+# ARCHITECTURE NOTE - built-in Option/Alt navigation:
+#
+# hotkey_PrevLearningWord and hotkey_NextLearningWord ("move to
+# next/prev unknown or highlighted word") ship with a built-in
+# Option/Alt + Left/Right binding.  That binding is NOT expressed here;
+# it is hardcoded in static/js/lute.js (handle_keydown).
+#
+# Option/Alt is used rather than Cmd/Ctrl because the reading workflow
+# presses letter keys right after navigating (e.g. W = Well Known), and
+# with Command held that becomes Cmd+W (closes the browser tab) or Cmd+Q
+# (quits the app).  Option (Mac) and Alt (Windows/Linux) both surface as
+# altKey, so unlike a Cmd-vs-Ctrl split this is actually one uniform
+# "alt+ArrowRight" keystring on every platform.
+#
+# It is still kept as a hardcoded client binding (not a default value
+# below) for two reasons: (1) the rule above forbids assigning defaults
+# to new hotkeys, since a user may already use that combo; and (2) a
+# default here only applies to brand-new databases -- an upgraded db
+# already has these keys stored blank, so add_default_user_settings
+# would skip them.  The hardcoded binding sidesteps both.
+#
+# These two hotkeys are still registered here so they appear in the
+# Settings > Keyboard shortcuts screen and can be rebound to an extra
+# key; the JS handle_keydown map wires those custom bindings up.
+#
+# A cleaner long-term fix is to move hotkey handling fully client-side
+# so a single action can bind multiple key combinations.  Until then,
+# these defaults are intentionally left blank; the built-in behavior
+# comes from the JS.
 _initial_values = {
     "hotkey_StartHover": "Escape",
     "hotkey_PrevWord": "ArrowLeft",

@@ -8,6 +8,9 @@
 <script type="text/javascript" src="{{ url_for('static', filename='js/resize.js') }}" charset="utf-8" defer></script>
 <script type="text/javascript" src="{{ url_for('static', filename='js/text-options.js') }}" charset="utf-8" defer></script>
 <script type="text/javascript" src="{{ url_for('static', filename='js/dict-tabs.js') }}" charset="utf-8"></script>
+{% if companion %}
+<script type="text/javascript" src="{{ url_for('static', filename='js/parallel-pane.js') }}" charset="utf-8" defer></script>
+{% endif %}
 
 <div id="rendering_controls" style="display: none">
   <pre>
@@ -30,7 +33,7 @@
 </script>
 
 
-<div id="read_pane_container">
+<div id="read_pane_container" {% if companion %}class="has-companion"{% endif %}>
 
 <div id="read_pane_left">
 
@@ -156,6 +159,44 @@
   <div class="btm-margin-container"></div>
 </div>
 
+{% if companion %}
+<div id="read_pane_companion"
+     data-companion-book-id="{{ companion.book.id }}"
+     data-companion-page="{{ companion_page }}"
+     data-companion-page-count="{{ companion.page_count }}">
+  <div id="companion_header">
+    <span id="companion_title" title="{{ companion.book.title }}">{{ companion.book.title }}</span>
+    <span id="companion_state"></span>
+  </div>
+
+  <div id="companion_controls">
+    <button id="companion_prev" title="Show the previous companion page (does not anchor)">◀</button>
+    <span id="companion_page_indicator">{{ companion_page }}/{{ companion.page_count }}</span>
+    <button id="companion_next" title="Show the next companion page (does not anchor)">▶</button>
+    <button id="companion_anchor" title="Pin this pair of pages together">Anchor</button>
+    <button id="companion_unanchor" title="Remove the anchor on this page">Unpin</button>
+    <button id="companion_search_toggle" title="Find a page by the words on it">Find</button>
+  </div>
+
+  <div id="companion_search" class="hide">
+    <input type="text" id="companion_search_input"
+           placeholder="Character names, e.g. Pierre Natasha"
+           title="Pages containing the most of these words are listed first">
+    <div id="companion_search_results"></div>
+  </div>
+
+  <iframe
+    id="companion_frame"
+    name="companionframe"
+    src="/parallel/text/{{ companion.book.id }}/{{ companion_page }}"
+    frameborder="0"
+    scrolling="auto"
+  >
+    Frame support required.
+  </iframe>
+</div>
+{% endif %}
+
 <div id="read_pane_right">
   <button class="close-btn read-pane-right-close-btn" onclick="closeRightPane()"></button>
   <div class="wordframecontainer">
@@ -195,6 +236,7 @@
   const theText = document.getElementById("thetext");
   const focusChk = document.getElementById("focus");
   const tap_sets_statusChk = document.getElementById("tap_sets_status");
+  const companionVisibleChk = document.getElementById("companion_visible");
 
   // Fixes a dev-only "bug" where the right pane doesn't translate up
   // to zero, due to the inline transform property, if it's first
@@ -229,6 +271,24 @@
     readPaneContainer.classList.toggle("tap_sets_status-active");
     localStorage.setItem("tap_sets_status", `${tap_sets_statusChk.checked}`)
   })
+
+  if (companionVisibleChk) {
+    companionVisibleChk.addEventListener("change", () => {
+      const book_id = $('#book_id').val();
+      readPaneContainer.classList.toggle("has-companion", companionVisibleChk.checked);
+      localStorage.setItem(`companionVisible-book${book_id}`, `${companionVisibleChk.checked}`)
+
+      if (companionVisibleChk.checked) {
+        // Let the three-column CSS widths apply again, rather than
+        // the two-column inline widths left over from resize.js.
+        readPaneLeft.style.removeProperty("width");
+        readPaneRight.style.removeProperty("width");
+      } else {
+        // Two columns again: give the splitter something to drag.
+        applyInitialPaneSizes();
+      }
+    })
+  }
 
   let _close_slide_in_menu_on_click_away = function(event) {
     const tgt = event.target;
@@ -312,6 +372,18 @@
       if (localStorage.getItem("tap_sets_status") === "true") {
         readPaneContainer.classList.add("tap_sets_status-active");
         tap_sets_statusChk.checked = true;
+      }
+    }
+
+    // A companion pane is visible by default (has-companion is set
+    // server-side); only hide it if the reader explicitly hid it before.
+    if (companionVisibleChk) {
+      const book_id = $('#book_id').val();
+      const companionVisible = localStorage.getItem(`companionVisible-book${book_id}`);
+      if (companionVisible === "false") {
+        readPaneContainer.classList.remove("has-companion");
+        companionVisibleChk.checked = false;
+        applyInitialPaneSizes();
       }
     }
 
@@ -483,6 +555,14 @@
         reset_cursor();
         start_hover_mode();
         $('#page_num').val(actualPage);
+
+        // Pages are ajax'd in, so nothing outside this callback can
+        // tell that the reader has moved.  Anything that follows the
+        // page -- currently the parallel-text pane -- listens for this.
+        document.dispatchEvent(
+          new CustomEvent("lute-page-changed", { detail: { page: actualPage } })
+        );
+
         enable_page_nav_links();
         set_page_fraction();
         set_footer_control_visibility();
