@@ -155,3 +155,12 @@ cython_debug/
 desktop/node_modules/
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
+
+##########################
+# Briefcase iOS app (ios/)
+
+ios/build/
+ios/dist/
+ios/logs/
+# Locally built pure-Python wheels; regenerate with ios/build_pure_wheels.sh
+ios/wheels/

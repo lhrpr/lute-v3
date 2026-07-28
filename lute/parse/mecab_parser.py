@@ -15,7 +15,16 @@ import sys
 import os
 import re
 from typing import List
-from natto import MeCab
+
+try:
+    from natto import MeCab
+except ImportError:
+    # natto-py needs cffi, and dlopens libmecab at runtime.  Neither is
+    # available on every platform Lute runs on (iOS forbids both), and
+    # natto-py isn't installed there.  is_supported() reports False in
+    # that case, and the parser registry hides Japanese.
+    MeCab = None
+
 import jaconv
 from lute.parse.base import ParsedToken, AbstractParser
 from lute.settings.current import current_settings
@@ -42,6 +51,9 @@ class JapaneseParser(AbstractParser):
         True if a natto MeCab can be instantiated,
         otherwise false.
         """
+
+        if MeCab is None:
+            return False
 
         mecab_path = current_settings.get("mecab_path", "") or ""
         mecab_path = mecab_path.strip()

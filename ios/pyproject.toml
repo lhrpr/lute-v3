@@ -1,0 +1,103 @@
+# Briefcase project for the Lute iOS spike (Phase 0 of docs/ios-build-plan.md).
+#
+# This is deliberately separate from the repo-root pyproject.toml: that one
+# publishes the `lute3` package, this one only describes how to bundle it into
+# an iOS app.  The `lute` package is pulled in via `sources` rather than
+# `requires`, so its own dependency metadata -- and specifically natto-py,
+# which needs cffi and dlopen'd libmecab -- doesn't come along.
+
+[tool.briefcase]
+project_name = "Lute iOS"
+bundle = "org.lute"
+version = "0.1.0"
+url = "https://github.com/LuteOrg/lute-v3"
+author = "Lute"
+author_email = "lute@example.com"
+license = "MIT"
+license-files = ["../LICENSE.txt"]
+
+[tool.briefcase.app.luteios]
+formal_name = "Lute"
+description = "Learning Using Texts, running on-device."
+long_description = """Lute (Learning Using Texts) with its Flask engine
+embedded in-process, since iOS can't spawn a subprocess to host it.
+"""
+
+# "../lute" is the engine itself, copied whole so that the templates, static
+# assets, config/*.yml seeds and the db/language_defs submodule all come along.
+sources = [
+    "src/luteios",
+    "../lute",
+]
+
+# The full dependency closure, spelled out, because the install runs with
+# --no-deps.  Two reasons for that:
+#
+#  1. natto-py.  It's a hard dependency of `lute3`, needs cffi, and dlopens
+#     libmecab -- none of which works on iOS.  Japanese is off for this spike;
+#     the parser registry hides it when natto can't be imported.
+#
+#  2. greenlet.  SQLAlchemy declares it under a `platform_machine` marker, and
+#     pip evaluates environment markers against the *host*, not the --platform
+#     target.  So on an Intel Mac the marker matches, pip demands greenlet, and
+#     there is no iOS wheel (it's pure C with no fallback).  SQLAlchemy only
+#     imports greenlet for its asyncio support -- guarded by try/except in
+#     sqlalchemy/util/concurrency.py -- and Lute is entirely synchronous, so
+#     leaving it out is safe.  Skipping resolution also makes the bundle
+#     contents identical on Intel and Apple Silicon hosts.
+#
+# Direct dependencies keep the version bounds from the root pyproject.toml;
+# transitive ones float.
+requires = [
+    # Lute's own declared dependencies (see ../pyproject.toml), minus natto-py.
+    "Flask-SQLAlchemy>=3.1.1,<4",
+    "Flask-WTF>=1.2.1,<2",
+    "jaconv>=0.3.4,<1",
+    "platformdirs>=3.10.0,<4",
+    "requests>=2.31.0,<3",
+    "beautifulsoup4>=4.12.2,<5",
+    "PyYAML>=6.0.1,<7",
+    "toml>=0.10.2,<1",
+    "waitress>=2.1.2,<3",
+    "openepub>=0.0.9,<1",
+    "pyparsing>=3.1.4",
+    "pypdf>=3.17.4",
+    "subtitle-parser>=1.3.0",
+    "ahocorapy>=1.6.2",
+    # Transitive.
+    "blinker",
+    "certifi",
+    "chardet",
+    "charset-normalizer",
+    "click",
+    "Flask",
+    "idna",
+    "itsdangerous",
+    "Jinja2",
+    "MarkupSafe",
+    "soupsieve",
+    "SQLAlchemy",
+    "typing_extensions",
+    "urllib3",
+    "Werkzeug",
+    "WTForms",
+    "xmltodict",
+]
+
+# MarkupSafe and PyYAML only publish C-extension wheels, so ios/wheels holds
+# locally built pure-Python ones.  Run ./build_pure_wheels.sh to produce them.
+requirement_installer_args = [
+    "--no-deps",
+    "--find-links",
+    "wheels",
+]
+
+[tool.briefcase.app.luteios.iOS]
+requires = [
+    "toga-iOS~=0.5.0",
+    # toga-iOS's own dependencies, again because of --no-deps.
+    "toga-core",
+    "travertino",
+    "rubicon-objc",
+    "fonttools",
+]
