@@ -228,14 +228,23 @@ def _parse_suggestions(text, n):
 class Provider:
     "Base class for an AI provider."
 
-    def __init__(self, api_key, model, base_url=None):
+    def __init__(self, api_key, model, base_url=None, timeout=None):
         self.api_key = api_key
         self.model = model
         self.base_url = base_url
+        # Reading-screen lookups want the short default so a stalled model
+        # can't block the UI.  Offline batch work (see lute/clozeexport) passes
+        # a longer budget, because there's no user waiting and its prompts are
+        # much bigger.
+        self.timeout = timeout or LLM_ATTEMPT_TIMEOUT
 
     def _complete(self, prompt, temperature=0.2):
         "Send a single prompt and return the model's raw text reply (or '')."
         raise NotImplementedError
+
+    def complete(self, prompt, temperature=0.2):
+        "Public entry point for callers with their own prompt and parsing."
+        return self._complete(prompt, temperature=temperature)
 
     def suggest(self, term, sentence, source_lang_name, target_lang, n):
         "Return a list of candidate translation strings."
@@ -253,7 +262,7 @@ class Provider:
         "POST and return parsed JSON, raising typed errors for 429/404/timeout/other."
         try:
             resp = requests.post(
-                url, headers=headers, json=payload, timeout=LLM_ATTEMPT_TIMEOUT
+                url, headers=headers, json=payload, timeout=self.timeout
             )
         except requests.exceptions.Timeout as e:
             # Model is too slow -- treat as a fall-through so the cascade drops
@@ -399,7 +408,8 @@ _EXPLANATION_CACHE = _Cache()
 _DEEPL_CACHE = _Cache()
 
 
-def _run_model_cascade(provider_cls, api_key, base_url, models, call_fn):
+# pylint: disable=too-many-arguments,too-many-positional-arguments
+def _run_model_cascade(provider_cls, api_key, base_url, models, call_fn, timeout=None):
     """
     Run call_fn against the configured models best-first, returning (result, model).
 
@@ -416,7 +426,9 @@ def _run_model_cascade(provider_cls, api_key, base_url, models, call_fn):
         if _MODEL_COOLDOWN.get(model, 0) > now:
             continue
         tried_any = True
-        provider = provider_cls(api_key=api_key, model=model, base_url=base_url)
+        provider = provider_cls(
+            api_key=api_key, model=model, base_url=base_url, timeout=timeout
+        )
         for attempt in range(2):  # one retry for a transient 404
             try:
                 return call_fn(provider), model
@@ -663,7 +675,9 @@ class DeepLService:
             ) from e
 
         if resp.status_code in (401, 403):
-            raise AIServiceException("DeepL rejected the API key.  Check it in Settings.")
+            raise AIServiceException(
+                "DeepL rejected the API key.  Check it in Settings."
+            )
         if resp.status_code == 429:
             raise AIRateLimited("DeepL is rate-limiting requests.  Try again shortly.")
         if resp.status_code == 456:

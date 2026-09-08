@@ -1053,6 +1053,10 @@ function _lang_is_left_to_right() {
 
 
 function handle_keydown (e) {
+  if (event_target_is_text_entry(e)) {
+    return; // The user is typing, not issuing a shortcut.
+  }
+
   if ($('span.word').length == 0) {
     return; // Nothing to do.
   }

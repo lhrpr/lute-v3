@@ -164,3 +164,4 @@ ios/dist/
 ios/logs/
 # Locally built pure-Python wheels; regenerate with ios/build_pure_wheels.sh
 ios/wheels/
+cards.csv

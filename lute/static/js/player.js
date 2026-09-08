@@ -384,6 +384,9 @@ function jumpToBookmark(oper) {
 
 window.addEventListener("keydown", function (e) {
   // console.log(e.code);
+  if (event_target_is_text_entry(e)) {
+    return; // Space belongs to whatever the user is typing in.
+  }
   if (e.code == "Space") {
     // prevent scrolling when space is pressed
     // and it seems this fixes the issue where there's flashing

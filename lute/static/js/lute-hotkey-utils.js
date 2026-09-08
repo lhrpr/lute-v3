@@ -1,4 +1,21 @@
 /**
+ * True if the event came from somewhere the user is typing.
+ *
+ * Hotkeys are bound at the document/window level, so a keystroke in a
+ * text field (e.g. the companion pane's "Find" box) reaches them too,
+ * and a hotkey that preventDefault()s eats the character - typing "w"
+ * marks a term well known instead of appearing in the box.  Handlers
+ * bail out on this before doing anything.
+ */
+function event_target_is_text_entry(event) {
+  const el = event.target;
+  if (el == null) return false;
+  if (el.isContentEditable) return true;
+  return ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
+}
+
+
+/**
  * Get the pressed keys as a string, eg 'meta-KeyC', 'shift-KeyA'.
  *
  * If only meta/alt/ctl/shift are pressed, returns something like 'meta-MetaLeft'.
