@@ -23,6 +23,7 @@ from flask import (
 from sqlalchemy.event import listens_for
 from sqlalchemy.pool import Pool
 
+from lute.auth import add_basic_auth
 from lute.config.app_config import AppConfig
 from lute.db import db
 from lute.db.setup.main import setup_db
@@ -433,6 +434,9 @@ def create_app(
 
     # Plugins are loaded after the app, as they may use settings etc.
     _init_parser_plugins(app_config.plugin_datapath, outfunc)
+
+    # No-op unless LUTE_AUTH_PASSWORD is set, so local runs are unaffected.
+    add_basic_auth(app, outfunc)
 
     return app
 

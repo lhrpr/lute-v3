@@ -11,6 +11,11 @@ FROM python:3.11-slim-bookworm
 # Build args
 ARG INSTALL_EVERYTHING=false
 
+# Which config to bake in.  Defaults to the two-mount docker config;
+# hosts that only offer a single volume (e.g. Railway) can point this
+# at lute/config/config.yml.railway instead.
+ARG CONFIG_FILE=lute/config/config.yml.docker
+
 # Install base.
 COPY pyproject.toml .
 COPY README_PyPi.md .
@@ -19,7 +24,7 @@ ENV PIP_ROOT_USER_ACTION=ignore
 ENV FLIT_ROOT_INSTALL=1
 RUN pip install flit
 RUN flit install --only-deps --deps=production
-COPY lute/config/config.yml.docker /lute/config/config.yml
+COPY ${CONFIG_FILE} /lute/config/config.yml
 
 COPY docker/Dockerfile_scripts/install_everything.sh /lute/install_all.sh
 RUN chmod +x /lute/install_all.sh

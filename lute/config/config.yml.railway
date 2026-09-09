@@ -1,0 +1,13 @@
+ENV: prod
+DBNAME: lute.db
+
+# The folder _inside_ the container.
+# Railway attaches a single volume per service, so this must be
+# the mount path of that volume.
+DATAPATH: /lute_data
+
+# Backups live under DATAPATH rather than a second mount,
+# because Railway only gives one volume per service.
+BACKUP_PATH: /lute_data/backups
+
+IS_DOCKER: true
