@@ -72,6 +72,37 @@ Everything else resolves to a `py3-none-any` wheel for `arm64-iphoneos`,
 a pure-Python fallback in their source.  `build_pure_wheels.sh` builds that
 fallback into `ios/wheels/`, which `--find-links` picks up.
 
+## iPad
+
+The Briefcase template already builds universal (`TARGETED_DEVICE_FAMILY = "1,2"`,
+`UIDeviceFamily = [1, 2]`, all four orientations on iPad), so the same build runs
+natively on iPad — no separate target needed.
+
+Verified on **iPad Pro 11-inch (M5), iOS 26.4**: the book list renders the full
+desktop layout, and the reading screen parses and renders on-device (the Tutorial
+comes out at 663 word spans). Tapping a word opens the term form with the status
+buttons, tags and dictionary tabs all working.
+
+Three things need doing before it's pleasant, all of them plan §7 work:
+
+- **Portrait (834 pt) trips the existing `max-width: 980px` breakpoint**, so the
+  term pane comes up as a bottom overlay covering the sentence you're reading.
+  That is roughly the "portrait tablet → bottom panel" tier, but currently it
+  isn't toggleable and isn't sized to leave the context visible.
+- **The software keyboard takes ~40% of the screen and doesn't dismiss with the
+  pane.** Closing the term form with ✕ leaves the keyboard up, hiding the
+  dictionary area entirely. This is the "owns keyboard avoidance" item in §5.
+- **External dictionary tabs** (`collinsdiction`, `conjugator.re`) open popups
+  that still need the `WKUIDelegate` → `SFSafariViewController` reroute (§5.5).
+
+Landscape (1210 pt) does **not** trip the 980px breakpoint and falls back to the
+desktop three-pane side layout. Note that this was checked in a desktop browser
+sized to the iPad's viewport, not on the device — GUI automation is blocked on
+this Mac so the simulator can't be rotated from the CLI. Width-based rules were
+confirmed that way; `pointer: coarse` / `hover: none` report differently in a
+desktop browser than in WKWebView, so any CSS keyed off those still needs an
+on-device check.
+
 ## Data
 
 `lute.embedded.write_config` writes a `config.yml` with `DATAPATH` pointing at
