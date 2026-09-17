@@ -20,6 +20,24 @@ ARG CONFIG_FILE=lute/config/config.yml.docker
 COPY pyproject.toml .
 COPY README_PyPi.md .
 COPY lute /lute
+
+# lute/db/language_defs is a git submodule.  Build hosts that clone
+# without submodules (Railway, most CI defaults) leave it empty, and
+# Lute then fails at startup loading demo languages.  Fetch it only if
+# the build context didn't supply it, so local builds are unaffected.
+RUN if [ ! -f /lute/db/language_defs/english/definition.yaml ]; then \
+      echo "language_defs missing from build context, cloning ..." && \
+      apt-get update && \
+      apt-get install -y --no-install-recommends git ca-certificates && \
+      rm -rf /lute/db/language_defs && \
+      git clone --depth 1 \
+        https://github.com/LuteOrg/lute-language-defs.git \
+        /lute/db/language_defs && \
+      rm -rf /lute/db/language_defs/.git && \
+      apt-get purge -y git && apt-get autoremove -y && \
+      rm -rf /var/lib/apt/lists/*; \
+    fi
+
 ENV PIP_ROOT_USER_ACTION=ignore
 ENV FLIT_ROOT_INSTALL=1
 RUN pip install flit
