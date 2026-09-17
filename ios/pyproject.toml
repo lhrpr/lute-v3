@@ -23,6 +23,11 @@ long_description = """Lute (Learning Using Texts) with its Flask engine
 embedded in-process, since iOS can't spawn a subprocess to host it.
 """
 
+# The Lute logo, in every size the iOS template asks for -- any size that's
+# missing falls back to Briefcase's own default (the BeeWare bee).
+# Regenerate with ./build_icons.py.
+icon = "icons/lute"
+
 # "../lute" is the engine itself, copied whole so that the templates, static
 # assets, config/*.yml seeds and the db/language_defs submodule all come along.
 sources = [

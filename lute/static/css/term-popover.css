@@ -1,0 +1,176 @@
+/**
+ * Touch term popover.  See static/js/term-popover.js.
+ *
+ * Status swatches reuse the --status-N-color variables from styles.css, so the
+ * buttons match the word highlighting in the text.
+ */
+
+.lute-popover {
+    position: absolute;
+    z-index: 3000;
+    box-sizing: border-box;
+    width: max-content;
+    min-width: 15rem;
+    max-width: min(22rem, calc(100vw - 1rem));
+    padding: 0.75rem;
+    border: 1px solid #c8c8c8;
+    border-radius: 0.75rem;
+    background: #fff;
+    box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 25%);
+    font-size: 1rem;
+    line-height: 1.4;
+}
+
+.lute-popover-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.lute-popover-term {
+    font-size: 1.15rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+/* Generous tap target -- 44px is the iOS minimum. */
+.lute-popover-close {
+    flex: none;
+    width: 2.75rem;
+    height: 2.75rem;
+    margin: -0.75rem -0.75rem -0.75rem 0;
+    border: none;
+    background: none;
+    color: #666;
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+
+.lute-popover-saved {
+    display: none;
+}
+
+.lute-popover-saved.has-translation {
+    display: block;
+    margin-top: 0.15rem;
+    color: #444;
+    font-style: italic;
+    overflow-wrap: anywhere;
+}
+
+.lute-popover-statuses {
+    display: flex;
+    gap: 0.25rem;
+    margin: 0.6rem 0;
+}
+
+/* The swatch colours come from the active theme so the buttons match the word
+   highlighting in the text.  Themes legitimately set some of these to
+   transparent -- status 4, 5, Well Known and Ignore render as plain text in the
+   reading pane -- so a var() fallback can't rescue them (the variable is
+   defined, just see-through).  Hence the always-on border and neutral base:
+   every button stays visibly a button whatever the theme does, and the glyphs
+   plus the colour cues below keep ✓ and ⊘ apart. */
+.lute-popover-status {
+    flex: 1 1 0;
+    min-width: 2.25rem;
+    height: 2.75rem;
+    padding: 0;
+    border: 1px solid #ccc;
+    border-radius: 0.4rem;
+    background: #f7f7f7;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.lute-popover-status.status1 { background: var(--status-1-color); }
+.lute-popover-status.status2 { background: var(--status-2-color); }
+.lute-popover-status.status3 { background: var(--status-3-color); }
+.lute-popover-status.status4 { background: var(--status-4-color); }
+.lute-popover-status.status5 { background: var(--status-5-color); }
+.lute-popover-status.status99 { background: var(--status-99-color); }
+.lute-popover-status.status98 { background: var(--status-98-color); }
+
+.lute-popover-status.status99 {
+    border-color: #4fae66;
+    color: #1d7a37;
+}
+
+.lute-popover-status.status98 {
+    border-color: #d08076;
+    color: #a33325;
+}
+
+.lute-popover-status.selected {
+    border: 2px solid #222;
+    font-weight: 700;
+}
+
+.lute-popover-suggestions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #e4e4e4;
+    color: #777;
+}
+
+.lute-popover-suggestion {
+    min-height: 2.75rem;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid #d8d8d8;
+    border-radius: 0.4rem;
+    background: #fafafa;
+    color: #111;
+    font-size: 1rem;
+    text-align: left;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+.lute-popover-suggestion:active,
+.lute-popover-suggestion.saving {
+    background: var(--status-5-color);
+}
+
+.lute-popover-empty {
+    padding: 0.25rem 0;
+    font-size: 0.9rem;
+}
+
+.lute-popover-explain {
+    width: 100%;
+    min-height: 2.75rem;
+    margin-top: 0.5rem;
+    border: none;
+    border-radius: 0.4rem;
+    background: none;
+    color: #06c;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+.lute-popover-explanation:not(:empty) {
+    margin-top: 0.35rem;
+    max-height: 40vh;
+    overflow-y: auto;
+    color: #333;
+    font-size: 0.95rem;
+}
+
+.lute-popover-error:not(:empty) {
+    margin-top: 0.5rem;
+    color: #b00;
+    font-size: 0.9rem;
+}
+
+/* The popover replaces the term pane on touch, so keep the pane out of the
+   way entirely: reading screen is just the text plus the popover. */
+@media (pointer: coarse) {
+    body.lute-popover-mode #read_pane_right,
+    body.lute-popover-mode .dictcontainer {
+        display: none !important;
+    }
+}

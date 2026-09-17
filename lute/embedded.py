@@ -83,7 +83,9 @@ def is_serving(port, host=DEFAULT_HOST, timeout=0.5):
         return s.connect_ex((host, port)) == 0
 
 
-def start(datapath, port=DEFAULT_PORT, host=DEFAULT_HOST, dbname="lute.db", output_func=None):
+def start(
+    datapath, port=DEFAULT_PORT, host=DEFAULT_HOST, dbname="lute.db", output_func=None
+):
     """
     Create the app and serve it.  Blocks forever -- call it on a background
     thread, or use start_in_thread.

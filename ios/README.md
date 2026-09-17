@@ -83,17 +83,49 @@ desktop layout, and the reading screen parses and renders on-device (the Tutoria
 comes out at 663 word spans). Tapping a word opens the term form with the status
 buttons, tags and dictionary tabs all working.
 
-Three things need doing before it's pleasant, all of them plan §7 work:
+The bottom term pane and the keyboard that came with it are **replaced on touch
+by the no-typing popover** — see "Term popover" below. What's left from the
+original iPad pass:
 
-- **Portrait (834 pt) trips the existing `max-width: 980px` breakpoint**, so the
-  term pane comes up as a bottom overlay covering the sentence you're reading.
-  That is roughly the "portrait tablet → bottom panel" tier, but currently it
-  isn't toggleable and isn't sized to leave the context visible.
-- **The software keyboard takes ~40% of the screen and doesn't dismiss with the
-  pane.** Closing the term form with ✕ leaves the keyboard up, hiding the
-  dictionary area entirely. This is the "owns keyboard avoidance" item in §5.
 - **External dictionary tabs** (`collinsdiction`, `conjugator.re`) open popups
   that still need the `WKUIDelegate` → `SFSafariViewController` reroute (§5.5).
+  The popover doesn't link out to dictionaries yet, so this only bites if the
+  side pane is reached some other way.
+
+## Term popover
+
+On a touch device, tapping a word opens a card anchored to it instead of loading
+the term form into the side/bottom pane: any translation already saved, a status
+row, the candidate meanings from Gemini, and "explain in context". Everything is
+a tap, so the keyboard never opens. The reading screen is just the text, the
+highlights and the popover.
+
+Lives in `lute/static/js/term-popover.js` + `css/term-popover.css`, backed by two
+JSON routes in `lute/term/routes.py`:
+
+- `GET /term/popover_info/<langid>/<text>` — the translation and status already
+  saved, or nulls.
+- `POST /term/quick_save` — upsert on `(langid, text)`. The existing save paths
+  key on a term id, and a word that isn't a term yet has no `data-wid` to send.
+  An empty translation means "status only" and won't wipe a saved meaning.
+
+Statuses 1–5 select and are applied when a meaning is tapped (1 preselected, so
+the common case is one tap). Well Known and Ignore commit immediately — they're
+complete decisions with no meaning to attach.
+
+Gated on `pointer: coarse`, so desktop keeps the side pane and dictionary tabs
+untouched.
+
+Two things worth knowing if you touch this code:
+
+- The tap that opens the popover is still in flight when it opens — on iOS a tap
+  synthesises mousedown → mouseup → click, and the popover opens on mouseup. The
+  close-on-tap-away handler ignores clicks for 400ms after opening, or the
+  popover would close itself before ever being seen.
+- `_isUserUsingMobile()` in `lute.js` had `window.screen < 980`, comparing a
+  Screen object to a number — always NaN, always false. It mattered on iPad,
+  where WKWebView reports a desktop "Macintosh" user agent, so the UA test misses
+  and this was the only remaining check. Now `window.screen.width < 980`.
 
 Landscape (1210 pt) does **not** trip the 980px breakpoint and falls back to the
 desktop three-pane side layout. Note that this was checked in a desktop browser

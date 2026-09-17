@@ -396,6 +396,84 @@ def bulk_update_status():
     return jsonify("ok")
 
 
+@bp.route("/popover_info/<int:langid>/<text>", methods=["GET"])
+def popover_info(langid, text):
+    """
+    Current translation and status for a word in the reading pane, for the
+    touch popover (see static/js/term-popover.js).
+
+    Keyed on (langid, text) rather than a term id, because a word that isn't
+    a term yet has no id to key on -- the reading pane only renders data-wid
+    once a term exists.
+
+    json: { term_id, translation, status }, all null if the word is new.
+    """
+    repo = Repository(db.session)
+    term = repo.find(langid, text)
+    if term is None:
+        return jsonify({"term_id": None, "translation": None, "status": None})
+    return jsonify(
+        {
+            "term_id": term.id,
+            "translation": term.translation,
+            "status": term.status,
+        }
+    )
+
+
+@bp.route("/quick_save", methods=["POST"])
+def quick_save():
+    """
+    Create or update a term with just a translation and a status, for the
+    touch popover.
+
+    The existing save paths don't fit: bulk_update_status and
+    ajax_edit_from_index both key on an existing term id, and the full form
+    POST expects the whole TermForm.  This upserts on (langid, text) via
+    find_or_new, leaving parents, tags and romanization untouched.
+
+    json in:  { langid, text, translation, status }
+    json out: { term_id, status, translation }
+    """
+    data = request.get_json(silent=True) or {}
+    try:
+        langid = int(data.get("langid") or 0)
+        status = int(data.get("status") or 1)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid langid or status."}), 400
+
+    text = (data.get("text") or "").strip()
+    if langid == 0 or text == "":
+        return jsonify({"error": "langid and text are required."}), 400
+
+    valid_statuses = [1, 2, 3, 4, 5, Status.IGNORED, Status.WELLKNOWN]
+    if status not in valid_statuses:
+        return jsonify({"error": f"Invalid status {status}."}), 400
+
+    repo = Repository(db.session)
+    try:
+        term = repo.find_or_new(langid, text)
+        # An explicit empty translation means "status only" -- don't wipe a
+        # translation the user already saved.
+        translation = data.get("translation")
+        if translation is not None and translation.strip() != "":
+            term.translation = translation.strip()
+        term.status = status
+        repo.add(term)
+        repo.commit()
+    except Exception as ex:  # pylint: disable=broad-exception-caught
+        return jsonify({"error": f"Unable to save: {ex}"}), 500
+
+    saved = repo.find(langid, text)
+    return jsonify(
+        {
+            "term_id": saved.id if saved else None,
+            "status": saved.status if saved else status,
+            "translation": saved.translation if saved else None,
+        }
+    )
+
+
 @bp.route("/bulk_delete", methods=["POST"])
 def bulk_delete():
     "Delete terms."

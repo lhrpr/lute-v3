@@ -93,7 +93,13 @@ const _isUserUsingMobile = () => {
   // The original method in the SO post had width, height < 768,
   // but that broke playwright tests which opens a smaller browser window.
   if (!isMobile) {
-    isMobile = (window.screen < 980);
+    // window.screen is a Screen object, so comparing it to a number coerced
+    // to NaN and this check never fired.  It matters on iPad, where WKWebView
+    // reports a desktop "Macintosh" user agent, so the UA test above misses
+    // and this was the only thing left to catch it.
+    // Deliberately screen.width, not innerWidth: a narrow window on a large
+    // monitor should stay on desktop interactions.
+    isMobile = (window.screen.width < 980);
   }
 
   // Disabling this check - see https://stackoverflow.com/a/4819886/1695066
@@ -210,6 +216,14 @@ let _set_last_clicked_context = function(el, term) {
 function show_term_edit_form(el) {
   const wid = parseInt(el.data('wid'));
   _set_last_clicked_context(el, el.text());
+
+  // On touch, the no-typing popover replaces the term pane entirely.
+  // See static/js/term-popover.js.
+  if (typeof lute_popover_is_touch === "function" && lute_popover_is_touch()) {
+    lute_popover_open(el[0]);
+    return;
+  }
+
   _show_wordframe_url(`/read/edit_term/${wid}`);
 }
 
@@ -590,6 +604,13 @@ function _double_tap(el, e) {
  **/
 function _single_tap(el, e) {
   clear_newmultiterm_elements();
+
+  // The popover handles every word, not just unknown ones: re-tapping a word
+  // you've already graded is how you change your mind about it.
+  if (typeof lute_popover_is_touch === "function" && lute_popover_is_touch()) {
+    show_term_edit_form(el);
+    return;
+  }
 
   const term_is_status_0 = (el.data("status-class") == "status0");
   if (!term_is_status_0) {
