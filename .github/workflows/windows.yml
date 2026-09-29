@@ -1,0 +1,71 @@
+name: windows
+
+on:
+  push:
+    branches: [ "develop", "master", "my-mod", "windows" ]
+  pull_request:
+    branches: [ "develop", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Unit tests on Windows.  MeCab isn't installed, so mecab-dependent
+  # tests are expected to fail/skip; acceptance and playwright are not run.
+  unit-tests:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install packages
+      run: |
+        pip install flit
+        flit install --only-deps --deps develop
+
+    - name: Setup test config
+      run: |
+        mkdir -p "$RUNNER_TEMP/data"
+        DATA=$(cygpath -m "$RUNNER_TEMP/data")
+        printf "ENV: dev\nDATAPATH: %s\nDBNAME: test_lute.db\n" "$DATA" > "$RUNNER_TEMP/test_config.yml"
+        echo "LUTE_CONFIG_FILE=$(cygpath -m "$RUNNER_TEMP/test_config.yml")" >> "$GITHUB_ENV"
+
+    - name: Unit tests
+      run: pytest tests/unit -q
+
+  # Confirms the Tauri desktop shell compiles and bundles on Windows.
+  desktop-build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: npm
+        cache-dependency-path: desktop/package-lock.json
+
+    - uses: dtolnay/rust-toolchain@stable
+
+    - uses: swatinem/rust-cache@v2
+      with:
+        workspaces: desktop/src-tauri
+
+    - name: Build
+      working-directory: desktop
+      run: |
+        npm ci
+        npx tauri build --bundles nsis
