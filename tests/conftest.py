@@ -27,8 +27,9 @@ def pytest_sessionstart(session):  # pylint: disable=unused-argument
     accidentally write into the user_data (which could mess with prod
     data/media etc)
     """
-    thisdir = os.path.dirname(os.path.realpath(__file__))
-    configfile = os.path.join(thisdir, "..", "lute", "config", "config.yml")
+    # Honours LUTE_CONFIG_FILE, so a test run can point at its own config
+    # instead of overwriting the user's lute/config/config.yml.
+    configfile = AppConfig.default_config_filename()
 
     config = None
     with open(configfile, "r", encoding="utf-8") as f:

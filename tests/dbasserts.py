@@ -4,7 +4,6 @@ This module is "registered" to pytest in ./__init__.py
 to get nicer assertion details.
 """
 
-import os
 from sqlalchemy import create_engine
 from sqlalchemy.sql import text
 
@@ -15,11 +14,11 @@ def __sqlite_uri():
     """
     Get the application Sqlite URL from the config file.
     """
-    this_files_dir = os.path.dirname(os.path.realpath(__file__))
-    conf_file = os.path.normpath(
-        os.path.join(this_files_dir, "..", "lute", "config", "config.yml")
-    )
-    ac = AppConfig(conf_file)
+    # Must resolve the same config the app fixtures used, which honours
+    # LUTE_CONFIG_FILE.  Hardcoding lute/config/config.yml here pointed these
+    # assertions at the user's real database while the fixtures wrote to the
+    # test one, so every "table is empty" assertion saw production rows.
+    ac = AppConfig(AppConfig.default_config_filename())
     return ac.sqliteconnstring
 
 

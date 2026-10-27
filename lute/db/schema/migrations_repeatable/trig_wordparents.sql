@@ -3,6 +3,10 @@ DROP TRIGGER IF EXISTS trig_wordparents_after_insert_update_parent_WoStatus_if_f
 CREATE TRIGGER trig_wordparents_after_insert_update_parent_WoStatus_if_following
 -- created by db/schema/migrations_repeatable/trig_wordparents.sql
 AFTER INSERT ON wordparents
+FOR EACH ROW
+-- Device sync: while applying remote changes, term statuses arrive
+-- explicitly and must not be recomputed here.  See trig_synclog.sql.
+WHEN (SELECT SsValue FROM syncstate WHERE SsKey = 'applying') = '0'
 BEGIN
     UPDATE words
     SET WoStatus = (

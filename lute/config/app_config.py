@@ -85,6 +85,17 @@ class AppConfig:  # pylint: disable=too-many-instance-attributes
 
     @staticmethod
     def default_config_filename():
-        "Return the path to the default configuration file."
+        """
+        Return the path to the default configuration file.
+
+        LUTE_CONFIG_FILE overrides it.  The test suite requires a config
+        naming a test_ database, and without an override the only way to run
+        it was to overwrite lute/config/config.yml -- the user's real prod
+        config -- and copy it back afterwards.  An interrupted run then left
+        the prod config clobbered.  Tests set the env var instead.
+        """
+        override = os.environ.get("LUTE_CONFIG_FILE")
+        if override:
+            return override
         thisdir = AppConfig.configdir()
         return os.path.join(thisdir, "config.yml")

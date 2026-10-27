@@ -1,0 +1,41 @@
+{
+  "requestId": "NHkmHYnOTVyh8XEdDcO5xA",
+  "timestamp": "2026-09-17T22:01:07.115871744Z",
+  "method": "GET",
+  "path": "/",
+  "host": "lute-v3-production-6265.up.railway.app",
+  "httpStatus": 502,
+  "upstreamProto": "",
+  "downstreamProto": "HTTP/2.0",
+  "responseDetails": "Retried single replica",
+  "totalDuration": 5,
+  "upstreamAddress": "",
+  "clientUa": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:156.0) Gecko/20100101 Firefox/156.0",
+  "upstreamRqDuration": 1,
+  "txBytes": 4682,
+  "rxBytes": 579,
+  "srcIp": "193.114.145.51",
+  "edgeRegion": "asia-southeast1-eqsg3a",
+  "upstreamErrors": "[{\"deploymentInstanceID\":\"8a25472a-7db3-4665-a86f-ed15952e6fcd\",\"error\":\"connection refused\",\"duration\":0},{\"deploymentInstanceID\":\"8a25472a-7db3-4665-a86f-ed15952e6fcd\",\"error\":\"connection refused\",\"duration\":0},{\"deploymentInstanceID\":\"8a25472a-7db3-4665-a86f-ed15952e6fcd\",\"error\":\"connection refused\",\"duration\":0}]"
+}
+
+{
+  "requestId": "-01RHNQFR26N2L2V0ubPiw",
+  "timestamp": "2026-09-17T22:01:07.759571368Z",
+  "method": "GET",
+  "path": "/favicon.ico",
+  "host": "lute-v3-production-6265.up.railway.app",
+  "httpStatus": 502,
+  "upstreamProto": "",
+  "downstreamProto": "HTTP/2.0",
+  "responseDetails": "Retried single replica",
+  "totalDuration": 4,
+  "upstreamAddress": "",
+  "clientUa": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:156.0) Gecko/20100101 Firefox/156.0",
+  "upstreamRqDuration": 1,
+  "txBytes": 109,
+  "rxBytes": 598,
+  "srcIp": "193.114.145.51",
+  "edgeRegion": "asia-southeast1-eqsg3a",
+  "upstreamErrors": "[{\"deploymentInstanceID\":\"8a25472a-7db3-4665-a86f-ed15952e6fcd\",\"error\":\"connection refused\",\"duration\":0},{\"deploymentInstanceID\":\"8a25472a-7db3-4665-a86f-ed15952e6fcd\",\"error\":\"connection refused\",\"duration\":0},{\"deploymentInstanceID\":\"8a25472a-7db3-4665-a86f-ed15952e6fcd\",\"error\":\"connection refused\",\"duration\":0}]"
+}
