@@ -217,3 +217,16 @@ def cloze_export(output_path, language, book_ids, family, use_llm, limit, **kwar
         limit=limit,
         **kwargs,
     )
+
+
+@bp.cli.command("vocab_sync")
+def vocab_sync():
+    """
+    Send learning terms and read sentences to the vocab server
+    (LUTE_VOCAB_* environment variables).
+    """
+    # pylint: disable=import-outside-toplevel
+    from lute.db import db
+    from lute.vocablink import run_once
+
+    print(run_once(db.session).as_dict())
