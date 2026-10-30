@@ -5,7 +5,7 @@ Merge rules for the vocab link, without a database.
 import pytest
 
 from lute.vocablink.config import VocabConfig, VocabConfigError, parse_languages
-from lute.vocablink.mapping import lute_timestamp_ms, lute_values, merge, split_base
+from lute.vocablink.mapping import lute_timestamp_ms, lute_values, merge
 
 
 def vals(reading="", translation="", status="1"):
@@ -41,6 +41,14 @@ def test_both_changed_status_goes_to_the_later_change():
     assert merge(base, lute, vocab, 1000, 2000).to_lute == {"status": "4"}
 
 
+def test_first_link_a_missing_status_never_wins():
+    # Unrated in vocab, edited after Lute's status was set: Lute's still wins.
+    assert merge(None, vals(status="3"), vals(status=None), 1000, 2000).to_vocab == {"status": "3"}
+    assert merge(None, vals(status=None), vals(status="2"), 2000, 1000).to_lute == {"status": "2"}
+    # Once linked, making a word unrated is a change like any other.
+    assert merge(vals(status="3"), vals(status="3"), vals(status=None), 0, 0).to_lute == {"status": None}
+
+
 def test_text_conflicts_go_to_vocab_unless_vocab_is_empty():
     m = merge(None, vals(translation="cat"), vals(translation="kitty"), 0, 0)
     assert m.to_lute == {"translation": "kitty"} and not m.to_vocab
@@ -52,15 +60,6 @@ def test_values_too_long_for_lute_dont_cross():
     m = merge(None, vals(reading="x"), vals(reading="y" * 101), 0, 0)
     assert not m.to_lute and not m.to_vocab
     assert m.base["reading"] == "x"
-
-
-def test_unapplied_changes_for_lute_keep_lutes_value_as_base():
-    m = merge(None, vals(translation="cat"), vals(translation="kitty"), 0, 0)
-    base = split_base(m, vals(translation="cat"), apply_to_lute=False)
-    assert base["translation"] == "cat"
-    # Next run: Lute unchanged, so nothing is pushed over vocab's value.
-    again = merge(base, vals(translation="cat"), vals(translation="kitty"), 0, 0)
-    assert not again.to_vocab and again.to_lute == {"translation": "kitty"}
 
 
 def test_status_timestamps_are_utc():

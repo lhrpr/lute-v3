@@ -116,30 +116,49 @@ Pairs sync both ways, so MCP cleanup flows back to Lute's `wordparents`.
    Runs in the background (`LUTE_VOCAB_INTERVAL`), via
    `POST /vocablink/sync`, or `flask cli vocab_sync`; `GET /vocablink/status`
    shows the last run.
-3. Pull from vocab: apply `merge().to_lute` (already computed, currently only
-   used to avoid pushing over vocab's values), create Lute terms for vocab
-   learning words via the term Repository, pull cursor over
-   `GET /v1/ext/words?since=`, conflict log page.
+3. ✅ Pull from vocab: each run first applies words changed in vocab since
+   the cursor (`vocablinkstate.pull_usn`): linked terms take the fields
+   vocab wins, and vocab learning words become Lute terms (through the term
+   Repository, so they're parsed like any term) or link to existing ones.
+   Terms deleted in Lute are remembered (`vocablinkdeleted`, filled by a
+   trigger) so a pull doesn't recreate them. Not done: a conflict log page;
+   counts and errors are in `GET /vocablink/status` for now.
 4. Parents on both sides, MCP tools.
 5. Images and tags.
 
-## How Phase 2 pushes
+## How a run works
 
-Each run: terms at status 1–5, plus linked terms whose fields differ from
-`VlBase`, are looked up in vocab (`/v1/ext/lookup`), merged three-way, and
-only fields Lute wins are sent, with `expect_modified_ms` so a word edited
-in vocab meanwhile comes back as a conflict and is retried next run. A field
-vocab wins keeps Lute's value as its base, so it isn't pushed back; Phase 3
-then sees vocab's value as the change and applies it.
+1. **Pull**: words changed in vocab since the cursor are merged three-way
+   against `VlBase`; what vocab wins is written into Lute. Unlinked vocab
+   learning words are linked to the Lute term with the same text, or
+   create one. Fields Lute wins keep vocab's value as base, so step 2 sees
+   them as Lute's changes.
+2. **Push**: terms at status 1–5, plus linked terms whose fields differ from
+   `VlBase`, are looked up in vocab (`/v1/ext/lookup`) and merged; fields
+   Lute wins are sent with `expect_modified_ms` (a word edited in vocab
+   meanwhile comes back as a conflict and is retried next run), and fields
+   vocab wins are written into Lute straight away.
+3. **Sentences** from newly read pages.
+
+Merge rules: a side that changed since base wins. If both changed, or the
+word is being linked for the first time, a status goes to the later change,
+except that at first link a missing status (unrated / 0) never beats a set
+one; text goes to vocab unless vocab's is empty. Values too long for Lute's
+columns don't cross.
 
 Sentences: read pages not yet in `vocablinkpages` (200 per run) are matched
 against linked learning terms using `sentences.SeTextLC` (`'*'` means
 `LOWER(SeText)`), no re-parsing. One sentence per (term, book), tracked in
 `vocablinksources`; the source is `lute:<BkUUID>`, the location `p. <n>`.
 
-Tried against copies of the real collections (2026-10-31): first run created
-935 words, linked 21 existing ones and sent 752 sentences from 59 pages in
-3 s; later runs with no changes send nothing.
+Tried against copies of the real collections (2026-10-31), both directions:
+the first run created 935 vocab words and 547 Lute terms, updated 36 Lute
+terms and 15 vocab words, and sent 842 sentences from 59 pages in 9 s; the
+second run changed nothing on either side.
+
+At first link, a vocab status set more recently than Lute's wins, which
+demoted 9 of Lute's well-known (99) terms to 3–4 in that trial (e.g.
+"buscar", "aunque") because vocab was still reviewing them.
 
 ## Known data mismatches
 
@@ -149,3 +168,6 @@ Tried against copies of the real collections (2026-10-31): first run created
 - Vocab has one word with language `es` beside 1,299 `Spanish`.
 - Many Lute learning terms have no translation, so their new vocab cards
   have an empty meaning side.
+- Pulling creates multiword Lute terms for article-plus-noun vocab words
+  ("la manzana"); they highlight as phrases while reading, and the bare
+  noun stays unknown.

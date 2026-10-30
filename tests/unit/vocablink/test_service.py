@@ -4,7 +4,8 @@ Vocab link runs, against an in-memory stand-in for the vocab server.
 The real server's behaviour is tested in anki-alternative
 (crates/sync-server/tests/ext_test.rs); FakeVocab copies only what the link
 relies on: matching on (language, lowercased term), fields left out are left
-alone, expect_modified_ms conflicts, and sentences not added twice.
+alone, expect_modified_ms conflicts, sentences not added twice, and a change
+feed.  modified_ms doubles as the server's sequence number.
 """
 
 import copy
@@ -26,6 +27,8 @@ class FakeVocab:
         self.words = {}
         self.clock = 4_000_000_000_000  # later than any Lute timestamp in these tests
         self.upserts = []
+        self.graves = []  # (id, sequence number)
+        self.next_id = 0
 
     def _key(self, language, term):
         return (language, term.strip().lower())
@@ -36,12 +39,30 @@ class FakeVocab:
 
     def add(self, language, term, **fields):
         "A word that already exists in vocab."
-        word = {"id": f"v{len(self.words)}", "language": language, "term": term,
+        self.next_id += 1
+        word = {"id": f"v{self.next_id}", "language": language, "term": term,
                 "reading": "", "translation": "", "status": None, "contexts": [],
                 "modified_ms": self._tick()}
         word.update(fields)
         self.words[self._key(language, term)] = word
         return word
+
+    def edit(self, term, language="Spanish", **fields):
+        "An edit or review made on a device."
+        word = self.get(term, language)
+        word.update(fields)
+        word["modified_ms"] = self._tick()
+
+    def delete(self, term, language="Spanish"):
+        word = self.words.pop(self._key(language, term))
+        self.graves.append((word["id"], self._tick()))
+
+    def changes(self, since):
+        return {
+            "usn": self.clock,
+            "words": [copy.deepcopy(w) for w in self.words.values() if w["modified_ms"] > since],
+            "deleted": [i for i, usn in self.graves if usn > since],
+        }
 
     def lookup(self, keys):
         return [copy.deepcopy(self.words.get(self._key(k["language"], k["term"]))) for k in keys]
@@ -150,11 +171,12 @@ def test_existing_vocab_words_are_linked_without_clobbering(empty_db, spanish):
     assert fake.get("manzana")["translation"] == "apple", "vocab's text wins"
     assert fake.get("manzana")["status"] == "4", "the later status wins"
     assert fake.get("pera")["translation"] == "pear", "empty in vocab: Lute's is sent"
-    assert summary.created == 0 and summary.linked + summary.updated == 2
+    # Both are linked by the pull; manzana takes vocab's values, pera sends its translation.
+    assert (summary.created, summary.lute_updated, summary.updated) == (0, 1, 1)
 
-    # Vocab's values aren't written into Lute yet, and aren't fought over either.
+    # Vocab's values are brought into Lute.
     db.session.refresh(manzana)
-    assert manzana.translation == "apple (lute)"
+    assert (manzana.translation, manzana.status) == ("apple", 4)
     before = len(fake.upserts)
     run(fake)
     assert len(fake.upserts) == before
@@ -186,7 +208,7 @@ def test_words_deleted_in_vocab_are_not_recreated(empty_db, spanish):
     set_term(gato, status=2)
     fake = FakeVocab()
     run(fake)
-    del fake.words[("Spanish", "gato")]
+    fake.delete("gato")
     set_term(gato, status=3)
 
     assert run(fake).deleted == 1
@@ -239,3 +261,119 @@ def test_unread_pages_send_nothing(empty_db, spanish):
     fake = FakeVocab()
     assert run(fake).pages == 0
     assert fake.get("gato")["contexts"] == []
+
+
+def lute_term(text, language_name="Spanish"):
+    "(WoText without zero-width spaces, WoStatus, WoTranslation, WoTokenCount), or None."
+    row = db.session.execute(
+        sqltext(
+            "SELECT WoText, WoStatus, WoTranslation, WoTokenCount FROM words "
+            "JOIN languages ON LgID = WoLgID WHERE LgName = :l AND WoTextLC = :t"
+        ),
+        {"l": language_name, "t": text.lower().replace(" ", "\u200b \u200b")},
+    ).fetchone()
+    return None if row is None else (row[0].replace("\u200b", ""), row[1], row[2], row[3])
+
+
+def test_vocab_learning_words_become_lute_terms(empty_db, spanish):
+    fake = FakeVocab()
+    fake.add("Spanish", "Perro", translation="dog", status="3")
+    fake.add("Spanish", "la manzana", translation="apple", status="1")
+    fake.add("Spanish", "nuevo", translation="new")  # unrated
+    fake.add("Spanish", "sol", translation="sun", status="K")
+    fake.add("German", "Hund", translation="dog", status="2")
+
+    summary = run(fake)
+    assert summary.lute_created == 2
+    assert lute_term("perro") == ("Perro", 3, "dog", 1)
+    assert lute_term("la manzana") == ("la manzana", 1, "apple", 3), "multiword terms are parsed"
+    assert lute_term("nuevo") is None and lute_term("sol") is None
+    assert len(links()) == 2
+
+    # Nothing new: nothing changes on either side.
+    before = len(fake.upserts)
+    summary = run(fake)
+    assert summary.lute_created == summary.lute_updated == 0
+    assert len(fake.upserts) == before
+
+
+def test_reviews_and_edits_in_vocab_reach_lute(empty_db, spanish):
+    [gato] = add_terms(spanish, ["gato"])
+    set_term(gato, status=1, translation="cat")
+    fake = FakeVocab()
+    run(fake)
+
+    fake.edit("gato", status="4", translation="cat (feline)")
+    assert run(fake).lute_updated == 1
+    assert lute_term("gato")[1:3] == (4, "cat (feline)")
+    # Reviewed to known in vocab, then to unrated.
+    fake.edit("gato", status="K")
+    run(fake)
+    assert lute_term("gato")[1] == 99
+    fake.edit("gato", status=None)
+    run(fake)
+    assert lute_term("gato")[1] == 0
+
+
+def test_when_both_change_status_goes_to_the_later_and_text_to_vocab(empty_db, spanish):
+    [gato] = add_terms(spanish, ["gato"])
+    set_term(gato, status=1, translation="cat")
+    fake = FakeVocab()
+    run(fake)
+
+    # Vocab's edit is the earlier one: date it before Lute's, and rewind the
+    # pull cursor so the backdated word is still in the next change feed.
+    fake.edit("gato", translation="kitty", status="2")
+    fake.get("gato")["modified_ms"] = 1_000
+    set_term(gato, status=3, translation="cat!")
+    db.session.execute(sqltext("UPDATE vocablinkstate SET VkValue = '0' WHERE VkKey = 'pull_usn'"))
+    db.session.commit()
+    run(fake)
+    assert lute_term("gato")[1:3] == (3, "kitty")
+    assert fake.get("gato")["status"] == "3"
+    assert fake.get("gato")["translation"] == "kitty"
+
+
+def test_terms_deleted_in_lute_are_not_recreated(empty_db, spanish):
+    [gato] = add_terms(spanish, ["gato"])
+    set_term(gato, status=1)
+    fake = FakeVocab()
+    run(fake)
+    db.session.delete(gato)
+    db.session.commit()
+
+    fake.edit("gato", status="2")
+    run(fake)
+    assert lute_term("gato") is None
+
+    # Added again in Lute: linked again, and pulled from then on.
+    [gato] = add_terms(spanish, ["gato"])
+    set_term(gato, status=1)
+    run(fake)
+    assert gato.id in links()
+    fake.edit("gato", status="5")
+    run(fake)
+    assert lute_term("gato")[1] == 5
+
+
+def test_vocab_values_too_long_for_lute_are_not_pulled(empty_db, spanish):
+    fake = FakeVocab()
+    fake.add("Spanish", "gato", translation="x" * 501, reading="ga-to", status="2")
+    run(fake)
+    assert lute_term("gato")[1:3] == (2, None)
+    assert fake.get("gato")["translation"] == "x" * 501, "and not overwritten either"
+
+
+def test_linking_to_an_unrated_vocab_word_settles_in_one_run(empty_db, spanish):
+    [tragar] = add_terms(spanish, ["tragar"])
+    set_term(tragar, status=3, translation="Swallow; stand")
+    fake = FakeVocab()
+    fake.add("Spanish", "tragar", translation="to swallow")  # unrated, edited later than Lute
+
+    summary = run(fake)
+    assert fake.get("tragar")["status"] == "3", "unrated never wins"
+    assert lute_term("tragar")[1:3] == (3, "to swallow"), "vocab's text wins, now"
+    assert summary.lute_updated == 1
+
+    summary = run(fake)
+    assert (summary.lute_updated, summary.updated) == (0, 0)

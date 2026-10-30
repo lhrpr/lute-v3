@@ -8,7 +8,7 @@ either side is one entry here.
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 # Lute's WoStatus -> vocab status.  Lute's 0 ("unknown") is vocab's unrated.
 STATUS_TO_VOCAB = {0: None, 1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 98: "I", 99: "K"}
@@ -98,8 +98,9 @@ def merge(
     base is what both sides last agreed on (None if never linked), vocab is
     None if vocab has no such word.  Per field: a side that changed since
     base wins.  If both changed, or there is no base, a status goes to the
-    later change, and text goes to vocab (where cards are edited while
-    studying) unless vocab's is empty.
+    later change (but with no base, a missing status never wins over a set
+    one), and text goes to vocab (where cards are edited while studying)
+    unless vocab's is empty.
     """
     if vocab is None:
         to_vocab = {k: v for k, v in lute.items() if v not in ("", None)}
@@ -119,6 +120,10 @@ def merge(
             winner = "lute"
         elif vocab_changed and not lute_changed:
             winner = "vocab"
+        elif not f.is_text and base is None and None in (lv, vv):
+            # First link: no status (unrated / unknown) says nothing, so it
+            # never wins over one that's set.
+            winner = "vocab" if lv is None else "lute"
         elif not f.is_text:
             winner = "lute" if lute_status_ms > vocab_modified_ms else "vocab"
         elif vv in ("", None):
@@ -136,23 +141,3 @@ def merge(
             to_lute[name] = vv
             new_base[name] = vv
     return Merge(to_vocab, to_lute, new_base)
-
-
-def split_base(merged: Merge, lute: Dict[str, Any], apply_to_lute: bool) -> Dict[str, Any]:
-    """
-    The base to store.  When changes for Lute aren't applied (the link only
-    pushes for now), those fields keep Lute's value as their base: Lute then
-    looks unchanged, so it isn't pushed back over vocab's value, and vocab's
-    still differs, so it is applied once pulling is in place.
-    """
-    if apply_to_lute:
-        return merged.base
-    ret = dict(merged.base)
-    for name in merged.to_lute:
-        ret[name] = lute[name]
-    return ret
-
-
-def key_of(language: str, text: str) -> Tuple[str, str]:
-    "Vocab matches words on (language, lowercased term)."
-    return (language.strip(), text.strip().lower())

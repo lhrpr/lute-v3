@@ -1,9 +1,10 @@
 """
 Link to a vocab (anki-alternative) server.
 
-Lute's learning terms (status 1-5) are created as vocab words, status and
-field changes are sent on, and each read page sends the sentence a learning
-term was met in, with the book as the word's source.  Runs on one instance
+Learning words (status 1-5) on either side are created on the other, and
+linked words keep their status, reading and translation in step both ways.
+Each read page sends the sentence a learning term was met in, with the book
+as the word's source.  Runs on one instance
 (the cloud Lute), configured by LUTE_VOCAB_* environment variables (see
 config.py), every few minutes in the background and on demand.
 

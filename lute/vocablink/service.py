@@ -1,10 +1,7 @@
 """
-One run of the link: send Lute's learning terms to vocab, then the sentences
-they were met in on pages that have been read.
-
-Only pushes for now.  Changes made in vocab are detected (the merge knows
-when vocab's value should win) but not yet written into Lute; see
-docs/vocab-integration-plan.md.
+One run of the link: bring in what changed in vocab, send Lute's learning
+terms to vocab, then the sentences they were met in on pages that have been
+read.  See docs/vocab-integration-plan.md.
 """
 
 import json
@@ -14,15 +11,17 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import text as sqltext
 
 from lute.models.book import Text
+from lute.term.model import Repository
 from lute.vocablink.client import VocabClient
 from lute.vocablink.config import VocabConfig
 from lute.vocablink.mapping import (
     LEARNING,
+    STATUS_FROM_VOCAB,
     ZWS,
     lute_timestamp_ms,
     lute_values,
     merge,
-    split_base,
+    STATUS_TO_VOCAB,
     term_text,
     vocab_values,
 )
@@ -36,6 +35,10 @@ PAGES_PER_RUN = 200
 class RunSummary:
     "What a run did."
 
+    # Vocab -> Lute.
+    lute_created: int = 0
+    lute_updated: int = 0
+    # Lute -> vocab.
     created: int = 0
     updated: int = 0
     linked: int = 0  # matched an existing vocab word, nothing to send
@@ -83,13 +86,128 @@ class Service:
         }
 
     def run(self) -> RunSummary:
-        "Push terms, then sentences."
+        "Pull, then push terms, then sentences."
         summary = RunSummary()
         languages = self._languages()
         if languages:
+            self.pull(languages, summary)
             self.push_terms(languages, summary)
             self.push_sentences(languages, summary)
         return summary
+
+    def _state(self, key, default=None):
+        row = self._exec("SELECT VkValue FROM vocablinkstate WHERE VkKey = :k", {"k": key}).fetchone()
+        return default if row is None else row[0]
+
+    def _set_state(self, key, value):
+        self._exec(
+            "INSERT OR REPLACE INTO vocablinkstate (VkKey, VkValue) VALUES (:k, :v)",
+            {"k": key, "v": str(value)},
+        )
+
+    # ---- Pull ----
+
+    def _status_ms(self, woid):
+        changed = self._exec("SELECT WoStatusChanged FROM words WHERE WoID = :w", {"w": woid}).scalar()
+        return lute_timestamp_ms(changed)
+
+    def _lute_term_for(self, repo, lgid, word, linked_woids):
+        """
+        The Lute term for a vocab learning word that isn't linked yet: an
+        existing unlinked term, or a new one.  None if the term was deleted
+        in Lute after being linked, or belongs to another vocab word.
+        """
+        term = repo.find_or_new(lgid, word["term"])
+        if term.id is None:
+            deleted = self._exec(
+                "SELECT 1 FROM vocablinkdeleted WHERE VdLgID = :l AND VdTextLC = :t",
+                {"l": lgid, "t": term.text_lc},
+            ).fetchone()
+            return None if deleted else term
+        return None if term.id in linked_woids else term
+
+    def pull(self, languages, summary: RunSummary):
+        """
+        Apply words changed in vocab since the last pull: update linked terms
+        where vocab's value wins, and create (or link) Lute terms for vocab
+        words being learned.  Changes Lute wins are left for push_terms.
+        """
+        lgid_for = {vocab: lgid for lgid, vocab in languages.items()}
+        changes = self.client.changes(int(self._state("pull_usn", "0")))
+        links = {
+            vid: (woid, json.loads(base), state)
+            for woid, vid, base, state in self._exec(
+                "SELECT VlWoID, VlVocabID, VlBase, VlState FROM vocablink"
+            )
+        }
+        linked_woids = {woid for woid, _, _ in links.values()}
+
+        for vid in changes["deleted"]:
+            if vid in links:
+                self._exec(
+                    "UPDATE vocablink SET VlState = 'deleted' WHERE VlVocabID = :v", {"v": vid}
+                )
+                summary.deleted += 1
+
+        repo = Repository(self.session)
+        learning = {STATUS_TO_VOCAB[s] for s in LEARNING}
+        for word in changes["words"]:
+            lgid = lgid_for.get(word["language"])
+            if lgid is None:
+                continue
+            vocab = vocab_values(word)
+            link = links.get(word["id"])
+            if link is not None:
+                woid, base, state = link
+                if state == "deleted":
+                    continue
+                term = repo.load(woid)
+                status_ms = self._status_ms(woid)
+            else:
+                if vocab["status"] not in learning:
+                    continue
+                term = self._lute_term_for(repo, lgid, word, linked_woids)
+                if term is None:
+                    continue
+                base = None
+                status_ms = 0 if term.id is None else self._status_ms(term.id)
+
+            is_new = term.id is None
+            # A new term has no status of its own yet (Term() defaults to 1),
+            # so vocab's always wins: a missing status never does.
+            lute = lute_values(term.romanization, term.translation, None if is_new else term.status)
+            m = merge(base, lute, vocab, status_ms, word["modified_ms"])
+            woid = term.id
+            if m.to_lute:
+                woid = self._write_term(repo, term, m.to_lute)
+                if is_new:
+                    summary.lute_created += 1
+                else:
+                    summary.lute_updated += 1
+            # Fields Lute wins keep vocab's value as base, so push_terms sees
+            # Lute's as the change and sends it.
+            new_base = dict(m.base)
+            for name in m.to_vocab:
+                new_base[name] = vocab[name]
+            self._save_link(woid, word, new_base)
+            links[word["id"]] = (woid, new_base, "linked")
+            linked_woids.add(woid)
+
+        repo.commit()
+        self._set_state("pull_usn", changes["usn"])
+        self.session.commit()
+
+    def _write_term(self, repo, term, to_lute) -> int:
+        "Write the values vocab won into a Lute term; returns its id."
+        if "reading" in to_lute:
+            term.romanization = to_lute["reading"]
+        if "translation" in to_lute:
+            term.translation = to_lute["translation"]
+        if "status" in to_lute:
+            term.status = STATUS_FROM_VOCAB[to_lute["status"]]
+        dbterm = repo.add(term)
+        self.session.flush()
+        return dbterm.id
 
     # ---- Terms ----
 
@@ -126,6 +244,14 @@ class Service:
         return ret
 
     def _save_link(self, woid, word, base, state="linked"):
+        # A term linked again is no longer one deleted in Lute.
+        self._exec(
+            """
+            DELETE FROM vocablinkdeleted
+            WHERE (VdLgID, VdTextLC) = (SELECT WoLgID, WoTextLC FROM words WHERE WoID = :w)
+            """,
+            {"w": woid},
+        )
         self._exec(
             """
             INSERT OR REPLACE INTO vocablink (VlWoID, VlVocabID, VlVocabModified, VlBase, VlState)
@@ -149,7 +275,16 @@ class Service:
             [{"language": p.language, "term": p.term} for p in pending]
         )
 
-        sends: List[Tuple[_Pending, Dict[str, Any], Dict[str, Any]]] = []
+        repo = Repository(self.session)
+
+        def link(p, word, m):
+            "Record the link, writing into Lute what vocab won."
+            if m.to_lute:
+                self._write_term(repo, repo.load(p.woid), m.to_lute)
+                summary.lute_updated += 1
+            self._save_link(p.woid, word, m.base)
+
+        sends: List[Tuple[_Pending, Dict[str, Any], Any]] = []
         for p, word in zip(pending, found):
             if word is None and p.base is not None:
                 # Deleted in vocab: keep it deleted.
@@ -162,23 +297,22 @@ class Service:
             vocab = None if word is None else vocab_values(word)
             vocab_ms = 0 if word is None else word["modified_ms"]
             m = merge(p.base, p.lute, vocab, p.status_ms, vocab_ms)
-            base = split_base(m, p.lute, apply_to_lute=False)
             item = {"language": p.language, "term": p.term, **m.to_vocab}
             if word is None:
                 item["deck"] = self.config.deck_for(p.language)
             elif m.to_vocab:
                 item["expect_modified_ms"] = vocab_ms
             else:
-                self._save_link(p.woid, word, base)
+                link(p, word, m)
                 summary.linked += 1
                 continue
-            sends.append((p, item, base))
+            sends.append((p, item, m))
 
         results = self.client.upsert([item for _, item, _ in sends]) if sends else []
-        for (p, _, base), res in zip(sends, results):
+        for (p, _, m), res in zip(sends, results):
             outcome = res["outcome"]
             if outcome in ("created", "updated", "unchanged"):
-                self._save_link(p.woid, res["word"], base)
+                link(p, res["word"], m)
                 if outcome == "created":
                     summary.created += 1
                 else:
@@ -187,7 +321,7 @@ class Service:
                 summary.conflicts += 1
             else:
                 summary.errors.append(f"{p.term}: {res.get('error')}")
-        self.session.commit()
+        repo.commit()
 
     # ---- Sentences ----
 
