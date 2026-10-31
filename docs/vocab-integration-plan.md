@@ -123,8 +123,22 @@ Pairs sync both ways, so MCP cleanup flows back to Lute's `wordparents`.
    Terms deleted in Lute are remembered (`vocablinkdeleted`, filled by a
    trigger) so a pull doesn't recreate them. Not done: a conflict log page;
    counts and errors are in `GET /vocablink/status` for now.
-4. Parents on both sides, MCP tools.
-5. Images and tags.
+4. **Vocab entries and senses** (before turning the link on for real):
+   vocab restructures into one entry per text with senses under it (gender,
+   part of speech, translation, cards, decks). Design and open questions in
+   `anki-alternative/docs/senses-plan.md`. The link then binds entries to
+   Lute terms one to one; status from Lute goes to single-sense entries only
+   (I/K to all senses); translations don't sync for multi-sense entries, and
+   each side shows the other's read-only (Lute's term form lists the vocab
+   senses); existing "la manzana" terms are split into bare
+   nouns with a gender.
+5. Lute: skip Spanish verb-plus-pronoun forms (dímelo, hazlo, llamándote)
+   when pushing: a trailing object pronoun on an infinitive, gerund, or
+   imperative (written accent, or haz/di/pon/ve/da/ten/ven/sal). Keeps
+   forms like `hablase` and irregular preterites. Possibly send their
+   sentence to the parent's vocab word.
+6. Parents on both sides, MCP tools.
+7. Images and tags.
 
 ## How a run works
 
@@ -163,11 +177,11 @@ demoted 9 of Lute's well-known (99) terms to 3–4 in that trial (e.g.
 ## Known data mismatches
 
 - Most vocab Spanish terms include the article ("la manzana"); Lute terms
-  don't ("manzana"). They don't match, so both exist in vocab. Parent links
-  (Phase 4) or an article-stripping match rule could join them.
+  don't ("manzana"). They don't match, so both exist in vocab. Fixed by
+  phase 4: the gender moves to the sense and cards generate the article.
 - Vocab has one word with language `es` beside 1,299 `Spanish`.
 - Many Lute learning terms have no translation, so their new vocab cards
   have an empty meaning side.
 - Pulling creates multiword Lute terms for article-plus-noun vocab words
   ("la manzana"); they highlight as phrases while reading, and the bare
-  noun stays unknown.
+  noun stays unknown. Not wanted: don't turn the link on before phase 4.
