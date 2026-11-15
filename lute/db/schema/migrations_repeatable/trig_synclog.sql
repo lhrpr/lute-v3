@@ -192,7 +192,23 @@ DROP TRIGGER IF EXISTS trig_words_synclog_update;
 
 CREATE TRIGGER trig_words_synclog_update
 AFTER UPDATE ON words FOR EACH ROW
+-- Only real changes.  An UPDATE fires this whether or not it changed
+-- anything, and Lute has a blanket one: deleting any term runs
+-- "UPDATE words SET WoSyncStatus = 0 WHERE WoID NOT IN (...)" over every
+-- term without a parent (trig_words.sql).  Logging those would mark most
+-- of the library as just edited, and last-write-wins would then let those
+-- non-edits overwrite real edits made on another device.
+-- WoCreated and WoStatusChanged are left out: Lute's own triggers stamp
+-- them as a consequence of a status change, which is already logged.
 WHEN (SELECT SsValue FROM syncstate WHERE SsKey = 'applying') = '0'
+  AND (old.WoLgID IS NOT new.WoLgID
+    OR old.WoText IS NOT new.WoText
+    OR old.WoTextLC IS NOT new.WoTextLC
+    OR old.WoStatus IS NOT new.WoStatus
+    OR old.WoTranslation IS NOT new.WoTranslation
+    OR old.WoRomanization IS NOT new.WoRomanization
+    OR old.WoTokenCount IS NOT new.WoTokenCount
+    OR old.WoSyncStatus IS NOT new.WoSyncStatus)
 BEGIN
     INSERT INTO synclog (SlTable, SlKey, SlOp)
     VALUES ('words', json_object(
@@ -491,5 +507,138 @@ BEGIN
     VALUES ('wordsread', json_object(
         'device', (SELECT SsValue FROM syncstate WHERE SsKey = 'device_id'),
         'id', old.WrID
+    ), 'delete');
+END;
+
+
+-- ---------------------------------------------------------------------
+-- languagedicts, booksections, bookpairs.
+--
+-- These have specs in lute/sync/schema.py but were missed when the
+-- triggers above were written, so edits to them never reached the log.
+-- Key order matches each spec's `key`, which is what lets the hub look a
+-- key up by exact SlKey text.
+-- ---------------------------------------------------------------------
+
+DROP TRIGGER IF EXISTS trig_languagedicts_synclog_insert;
+
+CREATE TRIGGER trig_languagedicts_synclog_insert
+AFTER INSERT ON languagedicts FOR EACH ROW
+WHEN (SELECT SsValue FROM syncstate WHERE SsKey = 'applying') = '0'
+BEGIN
+    INSERT INTO synclog (SlTable, SlKey, SlOp)
+    VALUES ('languagedicts', json_object(
+        'lang', (SELECT LgName FROM languages WHERE LgID = new.LdLgID),
+        'use_for', new.LdUseFor,
+        'dict_uri', new.LdDictURI), 'upsert');
+END;
+
+DROP TRIGGER IF EXISTS trig_languagedicts_synclog_update;
+
+CREATE TRIGGER trig_languagedicts_synclog_update
+AFTER UPDATE ON languagedicts FOR EACH ROW
+WHEN (SELECT SsValue FROM syncstate WHERE SsKey = 'applying') = '0'
+BEGIN
+    -- The key columns can change in place (a dictionary URL edited), which
+    -- reads as the old key going away and a new one appearing.
+    INSERT INTO synclog (SlTable, SlKey, SlOp)
+    SELECT 'languagedicts', json_object(
+        'lang', (SELECT LgName FROM languages WHERE LgID = old.LdLgID),
+        'use_for', old.LdUseFor,
+        'dict_uri', old.LdDictURI), 'delete'
+    WHERE old.LdLgID <> new.LdLgID OR old.LdUseFor <> new.LdUseFor
+       OR old.LdDictURI <> new.LdDictURI;
+    INSERT INTO synclog (SlTable, SlKey, SlOp)
+    VALUES ('languagedicts', json_object(
+        'lang', (SELECT LgName FROM languages WHERE LgID = new.LdLgID),
+        'use_for', new.LdUseFor,
+        'dict_uri', new.LdDictURI), 'upsert');
+END;
+
+DROP TRIGGER IF EXISTS trig_languagedicts_synclog_delete;
+
+CREATE TRIGGER trig_languagedicts_synclog_delete
+AFTER DELETE ON languagedicts FOR EACH ROW
+WHEN (SELECT SsValue FROM syncstate WHERE SsKey = 'applying') = '0'
+BEGIN
+    INSERT INTO synclog (SlTable, SlKey, SlOp)
+    VALUES ('languagedicts', json_object(
+        'lang', (SELECT LgName FROM languages WHERE LgID = old.LdLgID),
+        'use_for', old.LdUseFor,
+        'dict_uri', old.LdDictURI), 'delete');
+END;
+
+DROP TRIGGER IF EXISTS trig_booksections_synclog_insert;
+
+CREATE TRIGGER trig_booksections_synclog_insert
+AFTER INSERT ON booksections FOR EACH ROW
+WHEN (SELECT SsValue FROM syncstate WHERE SsKey = 'applying') = '0'
+BEGIN
+    INSERT INTO synclog (SlTable, SlKey, SlOp)
+    VALUES ('booksections', json_object(
+        'book', (SELECT BkUUID FROM books WHERE BkID = new.BsBkID),
+        'order', new.BsOrder), 'upsert');
+END;
+
+DROP TRIGGER IF EXISTS trig_booksections_synclog_update;
+
+CREATE TRIGGER trig_booksections_synclog_update
+AFTER UPDATE ON booksections FOR EACH ROW
+WHEN (SELECT SsValue FROM syncstate WHERE SsKey = 'applying') = '0'
+BEGIN
+    INSERT INTO synclog (SlTable, SlKey, SlOp)
+    VALUES ('booksections', json_object(
+        'book', (SELECT BkUUID FROM books WHERE BkID = new.BsBkID),
+        'order', new.BsOrder), 'upsert');
+END;
+
+DROP TRIGGER IF EXISTS trig_booksections_synclog_delete;
+
+CREATE TRIGGER trig_booksections_synclog_delete
+AFTER DELETE ON booksections FOR EACH ROW
+WHEN (SELECT SsValue FROM syncstate WHERE SsKey = 'applying') = '0'
+BEGIN
+    INSERT INTO synclog (SlTable, SlKey, SlOp)
+    VALUES ('booksections', json_object(
+        'book', (SELECT BkUUID FROM books WHERE BkID = old.BsBkID),
+        'order', old.BsOrder), 'delete');
+END;
+
+DROP TRIGGER IF EXISTS trig_bookpairs_synclog_insert;
+
+CREATE TRIGGER trig_bookpairs_synclog_insert
+AFTER INSERT ON bookpairs FOR EACH ROW
+WHEN (SELECT SsValue FROM syncstate WHERE SsKey = 'applying') = '0'
+BEGIN
+    INSERT INTO synclog (SlTable, SlKey, SlOp)
+    VALUES ('bookpairs', json_object(
+        'primary', (SELECT BkUUID FROM books WHERE BkID = new.BpPrimaryBkID),
+        'companion', (SELECT BkUUID FROM books WHERE BkID = new.BpCompanionBkID)
+    ), 'upsert');
+END;
+
+DROP TRIGGER IF EXISTS trig_bookpairs_synclog_update;
+
+CREATE TRIGGER trig_bookpairs_synclog_update
+AFTER UPDATE ON bookpairs FOR EACH ROW
+WHEN (SELECT SsValue FROM syncstate WHERE SsKey = 'applying') = '0'
+BEGIN
+    INSERT INTO synclog (SlTable, SlKey, SlOp)
+    VALUES ('bookpairs', json_object(
+        'primary', (SELECT BkUUID FROM books WHERE BkID = new.BpPrimaryBkID),
+        'companion', (SELECT BkUUID FROM books WHERE BkID = new.BpCompanionBkID)
+    ), 'upsert');
+END;
+
+DROP TRIGGER IF EXISTS trig_bookpairs_synclog_delete;
+
+CREATE TRIGGER trig_bookpairs_synclog_delete
+AFTER DELETE ON bookpairs FOR EACH ROW
+WHEN (SELECT SsValue FROM syncstate WHERE SsKey = 'applying') = '0'
+BEGIN
+    INSERT INTO synclog (SlTable, SlKey, SlOp)
+    VALUES ('bookpairs', json_object(
+        'primary', (SELECT BkUUID FROM books WHERE BkID = old.BpPrimaryBkID),
+        'companion', (SELECT BkUUID FROM books WHERE BkID = old.BpCompanionBkID)
     ), 'delete');
 END;

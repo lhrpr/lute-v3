@@ -66,6 +66,8 @@ from lute.cli.commands import bp as cli_bp
 from lute.ai.routes import bp as ai_bp
 from lute.parallel.routes import bp as parallel_bp
 from lute.vocablink.routes import bp as vocablink_bp
+from lute.sync.routes import bp as sync_bp
+from lute import sync
 from lute import vocablink
 from lute.vocablink.shadow import vocab_senses
 
@@ -367,6 +369,7 @@ def _create_app(app_config, extra_config):
     app.register_blueprint(ai_bp)
     app.register_blueprint(parallel_bp)
     app.register_blueprint(vocablink_bp)
+    app.register_blueprint(sync_bp)
     app.jinja_env.globals["vocab_senses"] = lambda woid: vocab_senses(db.session, woid)
     if app_config.is_test_db:
         app.register_blueprint(dev_api_bp)
@@ -446,6 +449,8 @@ def create_app(
     # No-op unless LUTE_VOCAB_URL and LUTE_VOCAB_TOKEN are set.
     if not app.config.get("TESTING"):
         vocablink.start_background(app, print)
+        # No-op until a server is set on the Sync page.
+        sync.start_background(app, print)
 
     return app
 

@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block title %}Sync{% endblock %}
+{% block header %}Sync{% endblock %}
+
+{% block body %}
+
+<p>
+  Keep this Lute's books, terms and reading positions in step with a server
+  (the hosted Lute).  Each device syncs every few minutes while Lute is open,
+  and can be edited offline in between.  Settings aren't synced.
+</p>
+
+<form method="POST" action="{{ url_for('sync.save_settings') }}">
+  <table class="settingstable">
+    <tr>
+      <td><label for="url">Server</label></td>
+      <td><input type="url" id="url" name="url" size="45"
+                 placeholder="https://lute.example.up.railway.app"
+                 value="{{ config.url }}"></td>
+    </tr>
+    <tr>
+      <td><label for="user">User</label></td>
+      <td><input type="text" id="user" name="user" size="20" placeholder="lute"
+                 autocapitalize="off" autocorrect="off" value="{{ config.user }}"></td>
+    </tr>
+    <tr>
+      <td><label for="password">Password</label></td>
+      <td>
+        <input type="password" id="password" name="password" size="20"
+               placeholder="{{ 'saved; blank keeps it' if config.password else '' }}">
+        {% if config.password %}
+        <label><input type="checkbox" name="clear_password" value="1"> clear</label>
+        {% endif %}
+      </td>
+    </tr>
+    <tr>
+      <td></td>
+      <td><button type="submit">Save</button></td>
+    </tr>
+  </table>
+</form>
+
+{% if config.enabled %}
+<h2>Status</h2>
+<p>
+  {% if not bootstrapped %}
+  Not synced with this server yet.  The first sync copies the library: if
+  this device only has the demo books and the server has a library, the
+  demo books are replaced by the server's; otherwise this library is sent
+  up and merged with the server's.
+  {% elif last_sync %}
+  Last synced {{ last_sync }} UTC.
+  {% endif %}
+</p>
+<p><button id="sync_now" type="button">Sync now</button> <span id="sync_result"></span></p>
+<pre id="sync_last">{% if last_run %}{{ last_run | tojson(indent=2) }}{% endif %}</pre>
+
+<script>
+  document.getElementById("sync_now").addEventListener("click", function () {
+    const btn = this;
+    const out = document.getElementById("sync_result");
+    btn.disabled = true;
+    out.textContent = "Syncing…";
+    fetch("{{ url_for('sync.run') }}", { method: "POST" })
+      .then(r => r.json().then(j => ({ ok: r.ok, j })))
+      .then(({ ok, j }) => {
+        out.textContent = ok ? "Done." : ("Failed: " + j.error);
+        document.getElementById("sync_last").textContent = JSON.stringify(j, null, 2);
+      })
+      .catch(e => { out.textContent = "Failed: " + e; })
+      .finally(() => { btn.disabled = false; });
+  });
+</script>
+{% endif %}
+
+<p class="smallgray">This device: {{ device }}</p>
+
+{% endblock %}
