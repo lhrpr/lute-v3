@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 import requests
 
 # Version of the request format the server expects.
-EXT_VERSION = 1
+EXT_VERSION = 2
 
 # Words per request: keeps each request well under the server's body limit
 # and each transaction short.

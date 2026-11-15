@@ -272,6 +272,7 @@ def term_popup(termid):
     return render_template(
         "read/termpopup.html",
         data=d,
+        termid=termid,
     )
 
 

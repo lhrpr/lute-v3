@@ -20,6 +20,12 @@
 {% endfor %}
 
 {% if data.translation != "" %}<p>{{ data.translation | safe }}</p>{% endif %}
+{% set vsenses = vocab_senses(termid) %}
+{% if vsenses %}
+<p class="vocab-shadow"><i>In vocab, not synced:</i>
+  {% for s in vsenses %}<br /><b>{{ s.cue }}</b>{% if s.translation %} — {{ s.translation }}{% endif %}{% endfor %}
+</p>
+{% endif %}
 
 {% if data.parents | length > 0 %}
 <div style="margin-top: 1.5em;">

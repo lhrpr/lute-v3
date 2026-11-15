@@ -14,6 +14,7 @@ from lute.models.book import Text
 from lute.term.model import Repository
 from lute.vocablink.client import VocabClient
 from lute.vocablink.config import VocabConfig
+from lute.vocablink.shadow import senses_json
 from lute.vocablink.mapping import (
     LEARNING,
     STATUS_FROM_VOCAB,
@@ -254,8 +255,9 @@ class Service:
         )
         self._exec(
             """
-            INSERT OR REPLACE INTO vocablink (VlWoID, VlVocabID, VlVocabModified, VlBase, VlState)
-            VALUES (:woid, :vid, :vmod, :base, :state)
+            INSERT OR REPLACE INTO vocablink
+                (VlWoID, VlVocabID, VlVocabModified, VlBase, VlState, VlSenses)
+            VALUES (:woid, :vid, :vmod, :base, :state, :senses)
             """,
             {
                 "woid": woid,
@@ -263,6 +265,7 @@ class Service:
                 "vmod": word["modified_ms"],
                 "base": json.dumps(base, sort_keys=True),
                 "state": state,
+                "senses": senses_json(word),
             },
         )
 

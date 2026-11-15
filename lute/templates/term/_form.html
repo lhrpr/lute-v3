@@ -74,6 +74,14 @@
              />
       </div>
 
+      {% set vsenses = vocab_senses(term.id) %}
+      {% if vsenses %}
+      <div class="vocab-shadow" title="The vocab app has several meanings for this term, so its translations aren't synced with Lute's.">
+        In vocab, not synced:
+        {% for s in vsenses %}<span class="vocab-shadow-sense"><b>{{ s.cue }}</b>{% if s.pos %} <i>({{ s.pos }})</i>{% endif %}{% if s.translation %} — {{ s.translation }}{% endif %}</span>{% if not loop.last %}; {% endif %}{% endfor %}
+      </div>
+      {% endif %}
+
       <div id="ai-suggestions" class="ai-suggestions"></div>
 
       <div id="status-container">

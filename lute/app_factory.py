@@ -67,6 +67,7 @@ from lute.ai.routes import bp as ai_bp
 from lute.parallel.routes import bp as parallel_bp
 from lute.vocablink.routes import bp as vocablink_bp
 from lute import vocablink
+from lute.vocablink.shadow import vocab_senses
 
 
 def _setup_app_dir(dirname, readme_content):
@@ -366,6 +367,7 @@ def _create_app(app_config, extra_config):
     app.register_blueprint(ai_bp)
     app.register_blueprint(parallel_bp)
     app.register_blueprint(vocablink_bp)
+    app.jinja_env.globals["vocab_senses"] = lambda woid: vocab_senses(db.session, woid)
     if app_config.is_test_db:
         app.register_blueprint(dev_api_bp)
 

@@ -123,15 +123,18 @@ Pairs sync both ways, so MCP cleanup flows back to Lute's `wordparents`.
    Terms deleted in Lute are remembered (`vocablinkdeleted`, filled by a
    trigger) so a pull doesn't recreate them. Not done: a conflict log page;
    counts and errors are in `GET /vocablink/status` for now.
-4. **Vocab entries and senses** (before turning the link on for real):
-   vocab restructures into one entry per text with senses under it (gender,
-   part of speech, translation, cards, decks). Design and open questions in
-   `anki-alternative/docs/senses-plan.md`. The link then binds entries to
-   Lute terms one to one; status from Lute goes to single-sense entries only
-   (I/K to all senses); translations don't sync for multi-sense entries, and
-   each side shows the other's read-only (Lute's term form lists the vocab
-   senses); existing "la manzana" terms are split into bare
-   nouns with a gender.
+4. ✅ **Vocab entries and senses**: vocab has one entry per text with senses
+   under it (gender, part of speech, translation, cards, decks); see
+   `anki-alternative/docs/senses-plan.md`, including "As built". The link
+   binds entries to Lute terms one to one (ext API version 2). An entry's
+   status is its least known sense's; Lute's 1–5 only applies to
+   single-sense entries, I/K to every sense. For multi-sense entries the
+   translation vocab reports is Lute's own (`external_translation`), so the
+   merge rules here are unchanged, and Lute keeps the senses it last saw in
+   `vocablink.VlSenses` and shows them read-only in the term form and popup
+   ("In vocab, not synced: …"; cloud instance only). Sentences for those
+   entries arrive in vocab unsorted. Old "la manzana" terms are split with
+   MCP `split_articles` (dry run first) before the link goes live.
 5. Lute: skip Spanish verb-plus-pronoun forms (dímelo, hazlo, llamándote)
    when pushing: a trailing object pronoun on an infinitive, gerund, or
    imperative (written accent, or haz/di/pon/ve/da/ten/ven/sal). Keeps
@@ -177,11 +180,13 @@ demoted 9 of Lute's well-known (99) terms to 3–4 in that trial (e.g.
 ## Known data mismatches
 
 - Most vocab Spanish terms include the article ("la manzana"); Lute terms
-  don't ("manzana"). They don't match, so both exist in vocab. Fixed by
-  phase 4: the gender moves to the sense and cards generate the article.
+  don't ("manzana"). Fixed by phase 4 once `split_articles` has run: in the
+  e2e trial on copies (all 932 splits applied), no linked Lute term starts
+  with an article, vocab got 836 new entries from Lute (was 935) and Lute 406
+  terms from vocab (was 547); a further run changed nothing. 120 vocab terms
+  list alternatives ("el neumático / la llanta") and need splitting by hand.
 - Vocab has one word with language `es` beside 1,299 `Spanish`.
 - Many Lute learning terms have no translation, so their new vocab cards
   have an empty meaning side.
-- Pulling creates multiword Lute terms for article-plus-noun vocab words
-  ("la manzana"); they highlight as phrases while reading, and the bare
-  noun stays unknown. Not wanted: don't turn the link on before phase 4.
+- Pulling would create multiword Lute terms for article-plus-noun vocab
+  words ("la manzana"), so run `split_articles` before turning the link on.
