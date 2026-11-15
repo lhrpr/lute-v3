@@ -56,12 +56,12 @@ tar xzf "$WORK/pyyaml-$PYYAML_VERSION.tar.gz" -C "$WORK"
 )
 "$PYTHON" -m wheel tags --remove \
     --python-tag py3 --abi-tag none --platform-tag any \
-    "$WORK"/dist/PyYAML-*.whl > /dev/null
-cp "$WORK"/dist/PyYAML-*.whl "$WHEELS/"
+    "$WORK"/dist/[Pp]y[Yy][Aa][Mm][Ll]-*.whl > /dev/null
+cp "$WORK"/dist/[Pp]y[Yy][Aa][Mm][Ll]-*.whl "$WHEELS/"
 
 # A stray _yaml*.so would mean the C extension got built after all, and the
 # wheel would fail to import on iOS.
-if unzip -l "$WHEELS"/PyYAML-*.whl | grep -q '\.so'; then
+if unzip -l "$WHEELS"/[Pp]y[Yy][Aa][Mm][Ll]-*.whl | grep -q '\.so'; then
     echo "ERROR: PyYAML wheel contains a compiled extension." >&2
     exit 1
 fi

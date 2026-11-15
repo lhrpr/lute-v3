@@ -162,6 +162,7 @@ desktop/src-tauri/gen/
 ios/build/
 ios/dist/
 ios/logs/
+ios/.briefcase/
 # Locally built pure-Python wheels; regenerate with ios/build_pure_wheels.sh
 ios/wheels/
 cards.csv
