@@ -40,7 +40,10 @@ RUN if [ ! -f /lute/db/language_defs/english/definition.yaml ]; then \
 
 ENV PIP_ROOT_USER_ACTION=ignore
 ENV FLIT_ROOT_INSTALL=1
-RUN pip install flit
+# Pinned: flit 4.2.0 refuses any readme when the project is at "/" (its new
+# path_is_within_directory check says /README_PyPi.md isn't inside /), and
+# this image builds at the root.  4.1.0 is the last release that built.
+RUN pip install "flit==4.1.0" "flit_core==4.1.0"
 RUN flit install --only-deps --deps=production
 COPY ${CONFIG_FILE} /lute/config/config.yml
 
